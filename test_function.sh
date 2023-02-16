@@ -8,10 +8,10 @@ curl localhost:8080 \
   -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
         "message": {
-          "data": "d29ybGQ=",
+          "data": "ewogICAibWFudWZhY3R1cmVyX2lkIjoiMDE4OTEwOTgwIiwKICAgInNvdXJjZV90eXBlIjoidHJhY2tpbmctZGV2aWNlIiwKICAgInN1YmplY3RfbmFtZSI6IkxvZ2lzdGljcyBUcnVjayBBIiwKICAgInJlY29yZGVkX2F0IjoiMjAyMy0wMi0xNiAxMDozODowMCswMjowMCIsCiAgICJsb2NhdGlvbiI6ewogICAgICAibG9uIjozNS40MzkxLAogICAgICAibGF0IjotMS41OTA4MwogICB9LAogICAiYWRkaXRpb25hbCI6ewogICAgICAidm9sdGFnZSI6IjcuNCIsCiAgICAgICJmdWVsX2xldmVsIjo3MSwKICAgICAgInNwZWVkIjoiNDEga3BoIgogICB9Cn0=",
           "attributes": {
-             "integration_id":"inbound1234",
-             "outbound_config_id":"outbound5678"
+             "integration_id":"36485b4f-88cd-49c4-a723-0ddff1f580c4",
+             "outbound_config_id":"1c19dc7e-73e2-4af3-93f5-a1cb322e5add"
           }
         },
         "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
