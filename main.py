@@ -48,3 +48,4 @@ async def main(cloud_event):
 # Wrapper to be able to run the async function locally with the functions framework
 def main_sync_to_aync(cloud_event):
     asyncio.run(main(cloud_event))
+    return {}

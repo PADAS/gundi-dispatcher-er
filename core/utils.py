@@ -1,4 +1,5 @@
 # ToDo: Move base classes or utils into the SDK
+import base64
 import json
 import aiohttp
 import logging
@@ -56,7 +57,7 @@ async def get_outbound_config_detail(
 
     logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
 
-    connect_timeout, read_timeout = DEFAULT_REQUESTS_TIMEOUT
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
     timeout_settings = aiohttp.ClientTimeout(
         sock_connect=connect_timeout, sock_read=read_timeout
     )
@@ -161,7 +162,7 @@ async def get_inbound_integration_detail(
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.InboundIntId: integration_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: response.status_code,
+                    ExtraKeys.StatusCode: e.status,
                 },
             )
             raise ReferenceDataError(
@@ -186,7 +187,8 @@ async def get_inbound_integration_detail(
 
 def extract_fields_from_message(message):
     if message:
-        observation = message.get("data")
+        data = base64.b64decode(message.get("data", "").encode('utf-8'))
+        observation = json.loads(data)
         attributes = message.get("attributes")
         if not observation:
             logger.warning(f"No observation was obtained from {message}")
