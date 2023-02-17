@@ -8,15 +8,12 @@ from core.errors import DispatcherException
 from core import tracing
 
 
-async def positions_dispatcher(cloud_event):
+async def positions_dispatcher(event):
     with tracing.tracer.start_as_current_span(
             "er_positions_dispatcher", kind=SpanKind.CLIENT
     ) as current_span:
-        # Extract the payload from the CloudEvent
-        payload = json.loads(cloud_event.data.decode('utf-8'))
-
-        # Extract the observation from the message
-        observation, attributes = extract_fields_from_message(payload["message"])
+        # Extract the observation from the CloudEvent
+        observation, attributes = extract_fields_from_message(event)
 
         # Get some configuration data as needed
         inbound_config_id = attributes.get("integration_id")
@@ -28,6 +25,7 @@ async def positions_dispatcher(cloud_event):
         provider = inbound_config.provider
 
         try:  # Dispatch the observation
+            print(f"Sending observation to ER with config: {outbound_config} ")
             dispatcher = ERPositionDispatcher(outbound_config, provider)
             await dispatcher.send(observation)
         except Exception as e:  # ToDo: Handle the different errors
@@ -37,15 +35,16 @@ async def positions_dispatcher(cloud_event):
             current_span.add_event(
                 name="routing_service.observation_dispatched_successfully"
             )
+            print("Observation dispatched successfully.")
 
 
 @cloud_event
-async def main(cloud_event):
-    # Notice: the event loop is automatically created and managed by Cloud Functions
-    await positions_dispatcher(cloud_event)
+async def main_async(event):
+    await positions_dispatcher(event)
 
 
-# Wrapper to be able to run the async function locally with the functions framework
-def main_sync_to_aync(cloud_event):
-    asyncio.run(main(cloud_event))
+# Wrapper to be able to run the async function
+def main(event, context):
+    print(f"Event received:\n{event}\nContext:{context}")
+    asyncio.run(main_async(event))
     return {}
