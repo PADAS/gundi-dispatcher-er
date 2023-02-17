@@ -1,5 +1,4 @@
 import asyncio
-import json
 from functions_framework import cloud_event
 from opentelemetry.trace import SpanKind
 from core.dispatcher import ERPositionDispatcher
@@ -9,12 +8,13 @@ from core import tracing
 
 
 async def positions_dispatcher(event):
+    # Extract the observation and attributes from the CloudEvent
+    observation, attributes = extract_fields_from_message(event)
+    # Load tracing context
+    tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
             "er_positions_dispatcher", kind=SpanKind.CLIENT
     ) as current_span:
-        # Extract the observation from the CloudEvent
-        observation, attributes = extract_fields_from_message(event)
-
         # Get some configuration data as needed
         inbound_config_id = attributes.get("integration_id")
         current_span.set_attribute("integration_id", str(inbound_config_id))

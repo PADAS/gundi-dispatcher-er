@@ -12,7 +12,7 @@ curl -m 70 -X POST https://er-positions-dispatcher-bbfgemg6oq-uc.a.run.app \
           "attributes": {
              "integration_id":"00bcef14-6a25-411a-9c35-df1c63dc3b90",
              "outbound_config_id":"33c2605c-e528-4216-b602-c14dbe64dce5",
-             "observation_type":"ps"
+             "observation_type":"ge"
           }
         }
 }'
