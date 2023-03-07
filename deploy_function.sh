@@ -29,4 +29,5 @@ gcloud beta functions deploy $FUNCTION_NAME \
     --min-instances=$MIN_INSTANCES \
     --max-instances=$MAX_INSTANCES \
     --concurrency=$CONCURRENCY \
-    --cpu=$CPU
+    --cpu=$CPU \
+    --retry
