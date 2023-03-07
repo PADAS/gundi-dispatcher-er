@@ -78,7 +78,6 @@ async def get_outbound_config_detail(
             )
             raise ReferenceDataError(f"Read Timeout for {target_url}")
         except aiohttp.ClientResponseError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
             target_url = str(e.request_info.url)
             logger.exception(
                 "Portal returned bad response during request for outbound config detail",
@@ -86,11 +85,11 @@ async def get_outbound_config_detail(
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.OutboundIntId: outbound_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: response.status_code,
+                    ExtraKeys.StatusCode: e.status,
                 },
             )
             raise ReferenceDataError(
-                f"Request for OutboundIntegration({outbound_id}) returned bad response"
+                f"Request for OutboundIntegration({outbound_id}) returned bad response. Status {e.status}"
             )
         else:
             try:

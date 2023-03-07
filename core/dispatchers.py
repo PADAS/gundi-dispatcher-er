@@ -113,3 +113,10 @@ class ERCameraTrapDispatcher(ERDispatcher):
         finally:
             await self.er_client.close()
         return result
+
+
+dispatcher_cls_by_type = {
+    schemas.StreamPrefixEnum.position: ERPositionDispatcher,
+    schemas.StreamPrefixEnum.geoevent: ERGeoEventDispatcher,
+    schemas.StreamPrefixEnum.camera_trap: ERCameraTrapDispatcher
+}
