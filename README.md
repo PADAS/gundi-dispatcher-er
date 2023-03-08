@@ -1,2 +1,4 @@
 # gundi-er-positions-dispatcher
-Serverless dispatcher to send position data to EarthRanger
+Serverless dispatcher (CloudEvent Functions) to send observations to EarthRanger.
+
+

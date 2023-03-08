@@ -1,6 +1,10 @@
 import asyncio
+import json
 import logging
+import aiohttp
+from datetime import datetime, timezone, timedelta
 from functions_framework import cloud_event
+from gcloud.aio import pubsub
 from opentelemetry.trace import SpanKind
 from core import dispatchers
 from core.utils import (
@@ -74,9 +78,46 @@ async def dispatch_transformed_observation(
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
 
 
-async def process_transformed_observation(message):
-    # Extract the observation and attributes from the CloudEvent
-    transformed_observation, attributes = extract_fields_from_message(message)
+async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
+    with tracing.tracer.start_as_current_span(
+            "send_message_to_dead_letter_topic", kind=SpanKind.CLIENT
+    ) as current_span:
+
+        print(f"Forwarding observation to dead letter topic: {transformed_observation}")
+        # Publish to another PubSub topic
+        connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+        timeout_settings = aiohttp.ClientTimeout(
+            sock_connect=connect_timeout, sock_read=read_timeout
+        )
+        async with aiohttp.ClientSession(
+            raise_for_status=True, timeout=timeout_settings
+        ) as session:
+            client = pubsub.PublisherClient(session=session)
+            # Get the topic
+            topic_name = settings.DEAD_LETTER_TOPIC
+            current_span.set_attribute("topic", topic_name)
+            topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+            # Prepare the payload
+            binary_payload = json.dumps(transformed_observation, default=str).encode("utf-8")
+            messages = [pubsub.PubsubMessage(binary_payload, **attributes)]
+            logger.info(f"Sending observation to PubSub topic {topic_name}..")
+            try:  # Send to pubsub
+                response = await client.publish(topic, messages)
+            except Exception as e:
+                logger.exception(
+                    f"Error sending observation to dead letter topic {topic_name}: {e}. Please check if the topic exists or review settings."
+                )
+                raise e
+            else:
+                logger.info(f"Observation sent to the dead letter topic successfully.")
+                logger.debug(f"GCP PubSub response: {response}")
+        current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+        current_span.add_event(
+            name="routing_service.observation_sent_to_dead_letter_queue"
+        )
+
+
+async def process_transformed_observation(transformed_observation, attributes):
     observation_type = attributes.get("observation_type")
     if observation_type not in dispatchers.dispatcher_cls_by_type.keys():
         error_msg = f"Observation type `{observation_type}` is not supported by this dispatcher."
@@ -87,17 +128,16 @@ async def process_transformed_observation(message):
             },
         )
         raise DispatcherException(f"Exception occurred dispatching observation: {error_msg}")
-    # Load tracing context
-    tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
+
     with tracing.tracer.start_as_current_span(
-            "er_serverless_dispatcher", kind=SpanKind.CLIENT
+            "er_dispatcher.process_transformed_observation", kind=SpanKind.CLIENT
     ) as current_span:
         current_span.add_event(
             name="routing_service.transformed_observation_received_at_dispatcher"
         )
         current_span.set_attribute("transformed_message", str(transformed_observation))
         current_span.set_attribute("environment", settings.TRACE_ENVIRONMENT)
-        current_span.set_attribute("service", "cdip-routing")
+        current_span.set_attribute("service", "er-dispatcher")
         try:
             observation_type = attributes.get("observation_type")
             device_id = attributes.get("device_id")
@@ -134,7 +174,7 @@ async def process_transformed_observation(message):
                 },
             )
             with tracing.tracer.start_as_current_span(
-                "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
+                "er_dispatcher.dispatch_transformed_observation", kind=SpanKind.CLIENT
             ) as current_span:
                 await dispatch_transformed_observation(
                     observation_type,
@@ -145,7 +185,7 @@ async def process_transformed_observation(message):
                 current_span.set_attribute("is_dispatched_successfully", True)
                 current_span.set_attribute("destination_id", str(outbound_config_id))
                 current_span.add_event(
-                    name="routing_service.observation_dispatched_successfully"
+                    name="er_dispatcher.observation_dispatched_successfully"
                 )
         except (DispatcherException, ReferenceDataError) as e:
             logger.exception(
@@ -178,25 +218,41 @@ async def process_transformed_observation(message):
             )
             # Unexpected internal errors will be redirected straight to deadletter
             current_span.set_attribute("error", error_msg)
-            # ToDo: Send to a dead letter pub/sub topic
-            # tracing_headers = tracing.faust_instrumentation.build_context_headers()
-            # await observations_transformed_deadletter.send(
-            #     value=transformed_observation, headers=tracing_headers
-            # )
-            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-            current_span.add_event(
-                name="routing_service.observation_sent_to_dead_letter_queue"
-            )
+            # Send it to a dead letter pub/sub topic
+            await send_observation_to_dead_letter_topic(transformed_observation, attributes)
 
 
-async def main_async(event):
-    await process_transformed_observation(event.data["message"])
+def is_event_too_old(event):
+    logger.debug(f"event attributes: {event._attributes}")
+    timestamp = event._attributes.get("time")
+    if not timestamp:
+        return False
+    event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
+    # Ignore events that are too old
+    return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
+
+
+async def process_event(event):
+    # Extract the observation and attributes from the CloudEvent
+    transformed_observation, attributes = extract_fields_from_message(event.data["message"])
+    # Load tracing context
+    tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
+    with tracing.tracer.start_as_current_span(
+            "er_dispatcher.process_event", kind=SpanKind.CLIENT
+    ) as current_span:
+        # Handle retries
+        if is_event_too_old(event):
+            await send_observation_to_dead_letter_topic(transformed_observation, attributes)
+            return  # Skip the event
+        # Process the event
+        await process_transformed_observation(transformed_observation, attributes)
 
 
 # Wrapper to be able to run the async function
 @cloud_event
 def main(event):
     print(f"Event received:\n{event}")
-    asyncio.run(main_async(event))
+    asyncio.run(process_event(event))
     print(f"Event processed successfully.")
     return {}

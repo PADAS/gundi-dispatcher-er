@@ -25,3 +25,9 @@ PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 
 # Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
+
+# Retries and dead-letter settings
+# ToDo: Get retry settings from the outbound config?
+GCP_PROJECT_ID = env.str("GCP_PROJECT_ID", "cdip-78ca")
+DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "destinations-dead-letter-dev")
+MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs

@@ -14,4 +14,4 @@ AioHttpClientInstrumentor().instrument()
 HTTPXClientInstrumentor().instrument()
 # Using the X-Cloud-Trace-Context header
 set_global_textmap(CloudTraceFormatPropagator())
-tracer = config.configure_tracer(name="gundi-er-positions-dispatcher", version="0.1.0")
+tracer = config.configure_tracer(name="er-dispatcher", version="0.1.0")

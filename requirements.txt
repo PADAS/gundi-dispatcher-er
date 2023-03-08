@@ -13,3 +13,4 @@ opentelemetry-instrumentation-requests==0.35b0
 opentelemetry-instrumentation-aiohttp-client==0.35b0
 opentelemetry-instrumentation-confluent-kafka==0.35b0
 opentelemetry-instrumentation-httpx==0.35b0
+gcloud-aio-pubsub==5.2.0

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Check arguments
-# ToDo: Support more arguments, maybe use named arguments?
 if [ $# -ne 2 ]; then
   echo "Usage: ./deploy.sh <FUNCTION_NAME> <PUBSUB_TOPIC_ID>"
   # Usage Example ./deploy.sh  manyoni-er-dispatcher-stg destination-1c19dc7e-73e2-4af3-93f5-a1cb322e5add-stg
@@ -9,6 +8,7 @@ if [ $# -ne 2 ]; then
 fi
 FUNCTION_NAME=$1
 PUBSUB_TOPIC_ID=$2
+# Extra settings. # ToDo: get this settings from the outbound config?
 REGION="us-central1"
 MIN_INSTANCES=1
 MAX_INSTANCES=2
