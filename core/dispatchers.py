@@ -101,6 +101,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         result = None
         try:
             file_name = camera_trap_payload.get("file")
+            # ToDo use async libs for cloudstorage and file handling
             file = self.cloud_storage.download(file_name)
             result = await self.er_client.post_camera_trap_report(
                 camera_trap_payload, file

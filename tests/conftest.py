@@ -20,11 +20,11 @@ def mock_cache(mocker):
 
 @pytest.fixture
 def mock_gundi_client(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_inbound_integration.return_value = async_return(
@@ -50,23 +50,62 @@ def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
 
 
 @pytest.fixture
-def mock_erclient_class(mocker):
+def mock_erclient_class(mocker, post_sensor_observation_response):
     mocked_erclient_class = mocker.MagicMock()
-    positions_mock = mocker.MagicMock()
-    positions_mock.post_sensor_observation.return_value = async_return(
+    erclient_mock = mocker.MagicMock()
+    erclient_mock.post_sensor_observation.return_value = async_return(
         post_sensor_observation_response
     )
-    positions_mock.close.return_value = async_return(
+    erclient_mock.post_report.return_value = async_return(
+        post_report_response
+    )
+    erclient_mock.post_camera_trap_report.return_value = async_return(
+        post_camera_trap_report_response
+    )
+    erclient_mock.close.return_value = async_return(
         er_client_close_response
     )
-    mocked_erclient_class.return_value = positions_mock
-    # post_report
-    # post_camera_trap_report
+    mocked_erclient_class.return_value = erclient_mock
     return mocked_erclient_class
 
 
 @pytest.fixture
+def mock_get_cloud_storage(mocker):
+    return mocker.MagicMock()
+
+
+@pytest.fixture
 def post_sensor_observation_response():
+    return {}
+
+
+@pytest.fixture
+def post_report_response():
+    return {'id': '7f42ab47-fa7a-4a7e-acc6-cadcaa114646', 'location': {'latitude': 20.806785, 'longitude': -55.78498},
+            'time': '2023-03-07T10:24:02-08:00', 'end_time': None, 'serial_number': 29260, 'message': '',
+            'provenance': '', 'event_type': 'rainfall_rep', 'priority': 0, 'priority_label': 'Gray', 'attributes': {},
+            'comment': None, 'title': 'Rainfall', 'notes': [], 'reported_by': None, 'state': 'new', 'event_details': {},
+            'contains': [], 'is_linked_to': [], 'is_contained_in': [], 'files': [], 'related_subjects': [],
+            'sort_at': '2023-03-09T04:36:59.405991-08:00', 'patrol_segments': [], 'geometry': None,
+            'updated_at': '2023-03-09T04:36:59.405991-08:00', 'created_at': '2023-03-09T04:36:59.406835-08:00',
+            'icon_id': 'rainfall_rep', 'event_category': 'monitoring',
+            'url': 'https://gundi-load-testing.pamdas.org/api/v1.0/activity/event/7f42ab47-fa7a-4a7e-acc6-cadcaa114646',
+            'image_url': 'https://gundi-load-testing.pamdas.org/static/sprite-src/rainfall_rep.svg',
+            'geojson': {'type': 'Feature', 'geometry': {'type': 'Point', 'coordinates': [-55.78498, 20.806785]},
+                        'properties': {'message': '', 'datetime': '2023-03-07T18:24:02+00:00',
+                                       'image': 'https://gundi-load-testing.pamdas.org/static/sprite-src/rainfall_rep.svg',
+                                       'icon': {
+                                           'iconUrl': 'https://gundi-load-testing.pamdas.org/static/sprite-src/rainfall_rep.svg',
+                                           'iconSize': [25, 25], 'iconAncor': [12, 12], 'popupAncor': [0, -13],
+                                           'className': 'dot'}}}, 'is_collection': False, 'updates': [
+            {'message': 'Added', 'time': '2023-03-09T12:36:59.466462+00:00',
+             'user': {'username': 'gundi_serviceaccount', 'first_name': 'Gundi', 'last_name': 'Service Account',
+                      'id': '408388d0-bb42-43f2-a2c3-6805bcb5f315', 'content_type': 'accounts.user'},
+             'type': 'add_event'}], 'patrols': []}
+
+
+@pytest.fixture
+def post_camera_trap_report_response():
     return {}
 
 
@@ -230,19 +269,65 @@ def position_as_cloud_event():
             'id': '123451234512345',
             'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
             'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': '2023-03-08T12:34:56.789Z'
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         },
         data={
             "message": {
-              "data":"eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
-              "attributes":{
-                 "observation_type":"ps",
-                 "device_id":"018910980",
-                 "outbound_config_id":"1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
-                 "integration_id":"36485b4f-88cd-49c4-a723-0ddff1f580c4",
-                 "tracing_context":"{}"
-              }
+                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+                "attributes": {
+                    "observation_type": "ps",
+                    "device_id": "018910980",
+                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                    "tracing_context": "{}"
+                }
             },
             "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
-      }
+        }
+    )
+
+
+@pytest.fixture
+def geoevent_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJ0aXRsZSI6ICJSYWluZmFsbCIsICJldmVudF90eXBlIjogInJhaW5mYWxsX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJhbW91bnRfbW0iOiA2LCAiaGVpZ2h0X20iOiAzfSwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMToyNDowMi0wNzowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTU1Ljc4NDk4LCAibGF0aXR1ZGUiOiAyMC44MDY3ODV9fQ==',
+                'attributes': {
+                    'observation_type': 'ge', 'device_id': '003',
+                    'outbound_config_id': '9243a5e3-b16a-4dbd-ad32-197c58aeef59',
+                    'integration_id': '8311c4a5-ddab-4743-b8ab-d3d57a7c8212', 'tracing_context': '{}'
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
+def cameratrap_event_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJmaWxlIjogImNhbWVyYXRyYXAuanBnIiwgImNhbWVyYV9uYW1lIjogIk1hcmlhbm8ncyBDYW1lcmEiLCAiY2FtZXJhX2Rlc2NyaXB0aW9uIjogInRlc3QgY2FtZXJhIiwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMTo1MTowMC0wMzowMCIsICJsb2NhdGlvbiI6ICJ7XCJsb25naXR1ZGVcIjogLTEyMi41LCBcImxhdGl0dWRlXCI6IDQ4LjY1fSJ9',
+                'attributes': {
+                    'observation_type': 'ct', 'device_id': 'Mariano Camera',
+                    'outbound_config_id': '5f658487-67f7-43f1-8896-d78778e49c30',
+                    'integration_id': 'a244fddd-3f64-4298-81ed-b6fccc60cef8', 'tracing_context': '{}'
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
     )
