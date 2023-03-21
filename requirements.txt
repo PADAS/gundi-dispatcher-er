@@ -31,7 +31,7 @@ backports-zoneinfo==0.2.1
     #   tzlocal
 cachetools==5.3.0
     # via google-auth
-cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.2.11.1/cdip_connector-1.2.11.1-py3-none-any.whl
+cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.2.12/cdip_connector-1.2.12-py3-none-any.whl
     # via -r requirements.in
 certifi==2022.12.7
     # via
