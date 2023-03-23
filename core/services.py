@@ -225,7 +225,11 @@ def is_event_too_old(event):
     timestamp = event._attributes.get("time")
     if not timestamp:
         return False
-    event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+    try:  # The timestamp does not always include the microseconds part
+        event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError:
+        event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+    event_time = event_time.replace(tzinfo=timezone.utc)
     event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
     # Ignore events that are too old
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
