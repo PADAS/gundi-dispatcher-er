@@ -1,8 +1,11 @@
 import datetime
+import aiohttp
 import pytest
 import asyncio
+from aiohttp.client_reqrep import ConnectionKey
 from gundi_client.schemas import OutboundConfiguration
 from functions_framework.event_conversion import CloudEvent
+from redis import exceptions as redis_exceptions
 
 
 def async_return(result):
@@ -15,6 +18,15 @@ def async_return(result):
 def mock_cache(mocker):
     mock_cache = mocker.MagicMock()
     mock_cache.get.return_value = None
+    return mock_cache
+
+
+@pytest.fixture
+def mock_cache_with_connection_error(mocker):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = redis_exceptions.ConnectionError(
+        "Error while reading from 172.22.161.3:6379 : (104, 'Connection reset by peer')"
+    )
     return mock_cache
 
 
@@ -37,6 +49,36 @@ def mock_gundi_client(
         outbound_integration_config_list
     )
     mock_client.ensure_device.return_value = async_return(device)
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_with_client_connector_error(
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a connection error
+    client_connector_error = aiohttp.ClientConnectorError(
+        connection_key=ConnectionKey(
+            host="cdip-portal.pamdas.org",
+            port=443,
+            is_ssl=True,
+            ssl=True,
+            proxy=None,
+            proxy_auth=None,
+            proxy_headers_hash=None
+        ),
+        os_error=ConnectionError()
+    )
+    # Side effects to raise an exception when a method is called
+    mock_client.get_inbound_integration.side_effect = client_connector_error
+    mock_client.get_outbound_integration.side_effect = client_connector_error
+    mock_client.get_outbound_integration_list.side_effect = client_connector_error
+    mock_client.ensure_device.side_effect = client_connector_error
     return mock_client
 
 

@@ -10,6 +10,7 @@ from cdip_connector.core import schemas
 from . import settings
 from .errors import ReferenceDataError
 from gundi_client import PortalApi
+from redis import exceptions as redis_exceptions
 
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,43 @@ def get_redis_db():
     return walrus.Database(
         host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB
     )
+
+
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-
-
 portal = PortalApi()
+
+
+def read_config_from_cache_safe(cache_key, extra_dict):
+    try:
+        config = _cache_db.get(cache_key)
+    except redis_exceptions.ConnectionError as e:
+        logger.warning(
+            f"ConnectionError while reading integration configuration from Cache: {e}", extra={**extra_dict}
+        )
+        config = None
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while reading integration configuration from Cache: {e}", extra={**extra_dict}
+        )
+        config = None
+    finally:
+        return config
+
+
+def write_config_in_cache_safe(key, ttl, config, extra_dict):
+    try:
+        _cache_db.setex(key, ttl, config.json())
+    except redis_exceptions.ConnectionError as e:
+        logger.warning(
+            f"ConnectionError while writing integration configuration to Cache: {e}",
+            extra={**extra_dict}
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while writing integration configuration to Cache: {e}",
+            extra={**extra_dict}
+        )
 
 
 async def get_outbound_config_detail(
@@ -41,7 +74,7 @@ async def get_outbound_config_detail(
     }
 
     cache_key = f"outbound_detail.{outbound_id}"
-    cached = _cache_db.get(cache_key)
+    cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
 
     if cached:
         config = schemas.OutboundConfiguration.parse_raw(cached)
@@ -55,8 +88,8 @@ async def get_outbound_config_detail(
         )
         return config
 
-    logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
-
+    # Retrieve outbound integration details from the portal
+    logger.debug(f"Cache miss for outbound integration detail.", extra={**extra_dict})
     connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
     timeout_settings = aiohttp.ClientTimeout(
         sock_connect=connect_timeout, sock_read=read_timeout
@@ -77,6 +110,15 @@ async def get_outbound_config_detail(
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
             raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientConnectionError as e:
+            target_url = (
+                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
+            )
+            logger.error(
+                "Connection Error",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
         except aiohttp.ClientResponseError as e:
             target_url = str(e.request_info.url)
             logger.exception(
@@ -89,7 +131,7 @@ async def get_outbound_config_detail(
                 },
             )
             raise ReferenceDataError(
-                f"Request for OutboundIntegration({outbound_id}) returned bad response. Status {e.status}"
+                f"Request for OutboundIntegration({outbound_id}) returned bad response"
             )
         else:
             try:
@@ -104,7 +146,12 @@ async def get_outbound_config_detail(
                 )
             else:
                 if config:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                    write_config_in_cache_safe(
+                        key=cache_key,
+                        ttl=_cache_ttl,
+                        config=config,
+                        extra_dict=extra_dict
+                    )
                 return config
 
 
@@ -120,7 +167,7 @@ async def get_inbound_integration_detail(
     }
 
     cache_key = f"inbound_detail.{integration_id}"
-    cached = _cache_db.get(cache_key)
+    cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
 
     if cached:
         config = schemas.IntegrationInformation.parse_raw(cached)
@@ -144,7 +191,6 @@ async def get_inbound_integration_detail(
                 session=s, integration_id=str(integration_id)
             )
         except aiohttp.ServerTimeoutError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
             target_url = (
                 f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
             )
@@ -153,6 +199,15 @@ async def get_inbound_integration_detail(
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
             raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientConnectionError as e:
+            target_url = (
+                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
+            )
+            logger.error(
+                "Connection Error",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
         except aiohttp.ClientResponseError as e:
             target_url = str(e.request_info.url)
             logger.exception(
@@ -180,7 +235,12 @@ async def get_inbound_integration_detail(
                 )
             else:
                 if config:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                    write_config_in_cache_safe(
+                        key=cache_key,
+                        ttl=_cache_ttl,
+                        config=config,
+                        extra_dict=extra_dict
+                    )
                 return config
 
 
