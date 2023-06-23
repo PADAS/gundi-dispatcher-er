@@ -6,11 +6,14 @@ import logging
 import walrus
 from uuid import UUID
 from enum import Enum
-from cdip_connector.core import schemas
-from . import settings
-from .errors import ReferenceDataError
+from gundi_core import schemas as gundi_schemas
+from gundi_core.schemas import v2 as gundi_schemas_v2
 from gundi_client import PortalApi
+from gundi_client_v2 import GundiClient
 from redis import exceptions as redis_exceptions
+from . import settings
+from . import schemas as dispatcher_schemas
+from .errors import ReferenceDataError
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +67,7 @@ def write_config_in_cache_safe(key, ttl, config, extra_dict):
 
 async def get_outbound_config_detail(
     outbound_id: UUID,
-) -> schemas.OutboundConfiguration:
+) -> gundi_schemas.OutboundConfiguration:
     if not outbound_id:
         raise ValueError("integration_id must not be None")
 
@@ -77,7 +80,7 @@ async def get_outbound_config_detail(
     cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
 
     if cached:
-        config = schemas.OutboundConfiguration.parse_raw(cached)
+        config = gundi_schemas.OutboundConfiguration.parse_raw(cached)
         logger.debug(
             "Using cached outbound integration detail",
             extra={
@@ -135,7 +138,7 @@ async def get_outbound_config_detail(
             )
         else:
             try:
-                config = schemas.OutboundConfiguration.parse_obj(response)
+                config = gundi_schemas.OutboundConfiguration.parse_obj(response)
             except Exception:
                 logger.error(
                     f"Failed decoding response for Outbound Integration Detail",
@@ -157,7 +160,7 @@ async def get_outbound_config_detail(
 
 async def get_inbound_integration_detail(
     integration_id: UUID,
-) -> schemas.IntegrationInformation:
+) -> gundi_schemas.IntegrationInformation:
     if not integration_id:
         raise ValueError("integration_id must not be None")
 
@@ -170,7 +173,7 @@ async def get_inbound_integration_detail(
     cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
 
     if cached:
-        config = schemas.IntegrationInformation.parse_raw(cached)
+        config = gundi_schemas.IntegrationInformation.parse_raw(cached)
         logger.debug(
             "Using cached inbound integration detail",
             extra={**extra_dict, "integration_detail": config},
@@ -224,7 +227,7 @@ async def get_inbound_integration_detail(
             )
         else:
             try:
-                config = schemas.IntegrationInformation.parse_obj(response)
+                config = gundi_schemas.IntegrationInformation.parse_obj(response)
             except Exception:
                 logger.error(
                     f"Failed decoding response for InboundIntegration Detail",
@@ -244,6 +247,121 @@ async def get_inbound_integration_detail(
                 return config
 
 
+async def get_integration_details(integration_id: str) -> gundi_schemas.v2.Integration:
+    """
+    Helper function to retrieve integration configurations from Gundi API v2
+    """
+
+    if not integration_id:
+        raise ValueError("integration_id must not be None")
+
+    extra_dict = {
+        ExtraKeys.AttentionNeeded: True,
+        ExtraKeys.OutboundIntId: str(integration_id),
+    }
+
+    # Retrieve from cache if possible
+    cache_key = f"integration_details.{integration_id}"
+    cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
+
+    if cached:
+        config = gundi_schemas.v2.Integration.parse_raw(cached)
+        logger.debug(
+            "Using cached integration details",
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: False,
+                "integration_detail": config,
+            },
+        )
+        return config
+
+    # Retrieve details from the portal
+    logger.debug(f"Cache miss for integration details.", extra={**extra_dict})
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+    async with GundiClient(
+        connect_timeout=connect_timeout, data_timeout=read_timeout
+    ) as portal_v2:
+        try:
+            integration = await portal_v2.get_integration_details(
+                integration_id=integration_id
+            )
+        # ToDo: Catch more specific exceptions once the gundi client supports them
+        except Exception as e:
+            error_msg = f"Error retrieving integration details from the portal (v2): {e}"
+            logger.error(
+                error_msg,
+                extra=extra_dict,
+            )
+            raise ReferenceDataError(error_msg)
+        else:
+            if integration:  # don't cache empty response
+                write_config_in_cache_safe(
+                    key=cache_key,
+                    ttl=_cache_ttl,
+                    config=integration,
+                    extra_dict=extra_dict
+                )
+            return integration
+
+
+def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher_schemas.DispatchedObservation:
+    """
+    Helper function that looks into the cache for dispatched observations
+    """
+    extra_dict = {
+        ExtraKeys.GundiId: gundi_id,
+        ExtraKeys.OutboundIntId: destination_id
+    }
+    cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+    cached_data = _cache_db.get(cache_key)
+    if not cached_data:
+        # ToDo: Try to get this info from the portal in a cache miss
+        return None
+
+    try:
+        observation = dispatcher_schemas.DispatchedObservation.parse_raw(
+            cached_data
+        )
+    except redis_exceptions.ConnectionError as e:
+        logger.error(
+            f"ConnectionError while reading dispatched observations from Cache: {e}", extra={**extra_dict}
+        )
+        observation = None
+    except Exception as e:
+        logger.error(
+            f"Internal Error while reading dispatched observations from Cache: {e}", extra={**extra_dict}
+        )
+        observation = None
+    finally:
+        return observation
+
+
+def cache_dispatched_observation(
+        observation: dispatcher_schemas.DispatchedObservation,
+        destination: gundi_schemas_v2.Integration
+):
+    try:
+        gundi_id = str(observation.gundi_id)
+        destination_id = str(destination.id)
+        extra_dict = {
+            ExtraKeys.GundiId: gundi_id,
+            ExtraKeys.OutboundIntId: destination_id
+        }
+        cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+        _cache_db.setex(name=cache_key, value=observation.json())  # No ttl, this doesn't expire
+    except redis_exceptions.ConnectionError as e:
+        logger.warning(
+            f"ConnectionError while writing integration configuration to Cache: {e}",
+            extra=extra_dict
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while writing integration configuration to Cache: {e}",
+            extra=extra_dict
+        )
+
+
 def extract_fields_from_message(message):
     if message:
         data = base64.b64decode(message.get("data", "").encode('utf-8'))
@@ -257,7 +375,6 @@ def extract_fields_from_message(message):
         logger.warning(f"message contained no payload", extra={"message": message})
         return None, None
     return observation, attributes
-
 
 
 class ExtraKeys(str, Enum):
@@ -278,3 +395,9 @@ class ExtraKeys(str, Enum):
     RetryAttempt = "retry_attempt"
     StatusCode = "status_code"
     DeadLetter = "dead_letter"
+    GundiId = "gundi_id"
+    RelatedTo = "related_to"
+
+
+def is_null(value):
+    return value in {None, "", "None", "null"}
