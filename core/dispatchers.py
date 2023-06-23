@@ -2,10 +2,11 @@
 import logging
 from abc import ABC, abstractmethod
 from erclient import AsyncERClient
-from typing import Union
+from typing import Union, List
 from urllib.parse import urlparse
-from cdip_connector.core import schemas
+from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class Dispatcher(ABC):
         self.configuration = config
 
     @abstractmethod
-    async def send(self, messages: list):
+    async def send(self, messages: list, **kwargs):
         ...
 
 
@@ -61,7 +62,7 @@ class ERPositionDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERPositionDispatcher, self).__init__(config, provider)
 
-    async def send(self, position: dict):
+    async def send(self, position: dict, **kwargs):
         result = None
         try:
             result = await self.er_client.post_sensor_observation(position)
@@ -77,7 +78,7 @@ class ERGeoEventDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
 
-    async def send(self, messages: Union[list, dict]):
+    async def send(self, messages: Union[list, dict], **kwargs):
         results = []
         if isinstance(messages, dict):
             messages = [messages]
@@ -97,7 +98,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         super(ERCameraTrapDispatcher, self).__init__(config, provider)
         self.cloud_storage = get_cloud_storage()
 
-    async def send(self, camera_trap_payload: dict):
+    async def send(self, camera_trap_payload: dict, **kwargs):
         result = None
         try:
             file_name = camera_trap_payload.get("file")
@@ -116,8 +117,124 @@ class ERCameraTrapDispatcher(ERDispatcher):
         return result
 
 
+class DispatcherV2(ABC):
+    stream_type: schemas.v2.StreamPrefixEnum
+    destination_type: schemas.DestinationTypes
+
+    def __init__(
+            self,
+            integration: schemas.v2.Integration,
+            **kwargs
+    ):
+        self.integration = integration
+
+    @abstractmethod
+    async def send(self, messages: list, **kwargs):
+        ...
+
+
+class ERDispatcherV2(DispatcherV2):
+    DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
+
+    def __init__(
+            self,
+            integration: schemas.v2.Integration,
+            **kwargs
+    ):
+        super().__init__(integration, **kwargs)
+        # provider_key in EarthRanger
+        self.provider = kwargs.pop("provider")
+        self.er_client = self.make_er_client(
+            integration=self.integration,
+            provider=self.provider
+        )
+
+    @staticmethod
+    def make_er_client(
+        integration: schemas.v2.Integration,
+        provider: str
+    ) -> AsyncERClient:
+        provider_key = provider
+        url_parse = urlparse(integration.base_url)
+        # Look for the configuration values of the authentication action
+        configurations = integration.configurations
+        assert configurations  # ToDo: raise custom exception
+        auth_config = [c for c in configurations if c.action.value == "auth" ][0]
+        return AsyncERClient(
+            service_root=integration.base_url,
+            username=auth_config.login,
+            password=auth_config.password,
+            token=auth_config.token,
+            token_url=f"{url_parse.scheme}://{url_parse.hostname}/oauth2/token",
+            client_id="das_web_client",
+            provider_key=provider_key,
+            connect_timeout=ERDispatcher.DEFAULT_CONNECT_TIMEOUT_SECONDS,
+        )
+
+    @staticmethod
+    def generate_batches(data, batch_size=1000):
+        num_obs = len(data)
+        for start_index in range(0, num_obs, batch_size):
+            yield data[start_index : min(start_index + batch_size, num_obs)]
+
+
+class EREventDispatcher(ERDispatcherV2):
+
+    async def send(self, messages: Union[list, dict], **kwargs):
+        results = []
+        if isinstance(messages, dict):
+            messages = [messages]
+
+        async with self.er_client as client:
+            for m in messages:
+                try:
+                    results.append(await client.post_report(m))
+                except Exception as ex:
+                    logger.exception(f"exception raised sending to dest {ex}")
+                    raise ex
+        return results
+
+
+class EREventAttachmentDispatcher(ERDispatcherV2):
+    def __init__(
+            self,
+            integration: schemas.v2.Integration,
+            **kwargs
+    ):
+        super().__init__(integration=integration, **kwargs)
+        self.cloud_storage = get_cloud_storage()
+
+    async def send(self, attachment_payload: dict, **kwargs):
+        result = None
+        related_observation = kwargs.get("related_observation")
+        if not related_observation:
+            raise ValueError("related_observation is required")
+        try:
+            external_event_id = related_observation.external_id
+            file_path = attachment_payload.get("file_path")
+            # ToDo use async libs for cloudstorage and file handling to leverage the usage of asyncio
+            file = self.cloud_storage.download(file_path)
+            # ToDo: Support this in the er-client
+            result = await self.er_client.post_report_attachment(
+                report_id=external_event_id, payload=attachment_payload, file=file
+            )
+        except Exception as ex:
+            logger.exception(f"exception raised sending to dest {ex}")
+            raise ex
+        else:
+            self.cloud_storage.remove(file)
+        finally:
+            await self.er_client.close()
+        return result
+
+
+
 dispatcher_cls_by_type = {
+    # Gundi v1
     schemas.StreamPrefixEnum.position: ERPositionDispatcher,
     schemas.StreamPrefixEnum.geoevent: ERGeoEventDispatcher,
-    schemas.StreamPrefixEnum.camera_trap: ERCameraTrapDispatcher
+    schemas.StreamPrefixEnum.camera_trap: ERCameraTrapDispatcher,
+    # Gundi v2
+    schemas.v2.StreamPrefixEnum.event: EREventDispatcher,
+    schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher
 }
