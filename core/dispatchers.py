@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 
+from core.utils import find_config_for_action
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ class DispatcherV2(ABC):
         ...
 
 
-class ERDispatcherV2(DispatcherV2):
+class ERDispatcherV2(DispatcherV2, ABC):
     DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
 
     def __init__(
@@ -156,13 +157,20 @@ class ERDispatcherV2(DispatcherV2):
     ) -> AsyncERClient:
         provider_key = provider
         url_parse = urlparse(integration.base_url)
-        # Look for the configuration values of the authentication action
+        # Look for the configuration of the authentication action
         configurations = integration.configurations
-        assert configurations  # ToDo: raise custom exception
-        auth_config = [c for c in configurations if c.action.value == "auth" ][0]
+        integration_action_config = find_config_for_action(
+            configurations=configurations,
+            action_value=schemas.v2.EarthRangerActions.AUTHENTICATE.value
+        )
+        if not integration_action_config:
+            raise ValueError(
+                f"Authentication settings for integration {str(integration.id)} are missing. Please fix the integration setup in the portal."
+            )
+        auth_config = schemas.v2.ERAuthActionConfig.parse_obj(integration_action_config.data)
         return AsyncERClient(
-            service_root=integration.base_url,
-            username=auth_config.login,
+            service_root=f"{integration.base_url}/api/v1.0",
+            username=auth_config.username,
             password=auth_config.password,
             token=auth_config.token,
             token_url=f"{url_parse.scheme}://{url_parse.hostname}/oauth2/token",
@@ -212,11 +220,9 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
         try:
             external_event_id = related_observation.external_id
             file_path = attachment_payload.get("file_path")
-            # ToDo use async libs for cloudstorage and file handling to leverage the usage of asyncio
             file = self.cloud_storage.download(file_path)
-            # ToDo: Support this in the er-client
             result = await self.er_client.post_report_attachment(
-                report_id=external_event_id, payload=attachment_payload, file=file
+                report_id=external_event_id, file=file
             )
         except Exception as ex:
             logger.exception(f"exception raised sending to dest {ex}")

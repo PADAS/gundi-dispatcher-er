@@ -155,6 +155,8 @@ async def dispatch_transformed_observation_v2(
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
         else:
             # Cache data related to the dispatched observation
+            if isinstance(result, list):
+                result = result[0]
             dispatched_observation = schemas.DispatchedObservation(
                 gundi_id=gundi_id,
                 related_to=related_to,
