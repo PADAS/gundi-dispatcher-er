@@ -349,7 +349,11 @@ def cache_dispatched_observation(
             ExtraKeys.OutboundIntId: destination_id
         }
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
-        _cache_db.setex(name=cache_key, value=observation.json())  # No ttl, this doesn't expire
+        _cache_db.setex(
+            name=cache_key,
+            time=settings.DISPATCHED_OBSERVATIONS_CACHE_TTL,
+            value=observation.json()
+        )
     except redis_exceptions.ConnectionError as e:
         logger.warning(
             f"ConnectionError while writing integration configuration to Cache: {e}",
@@ -401,3 +405,13 @@ class ExtraKeys(str, Enum):
 
 def is_null(value):
     return value in {None, "", "None", "null"}
+
+
+def find_config_for_action(configurations, action_value):
+    return next(
+        (
+            config for config in configurations
+            if config.action.value == action_value
+        ),
+        None
+    )
