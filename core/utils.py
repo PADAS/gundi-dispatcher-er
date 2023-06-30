@@ -309,17 +309,17 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
     """
     Helper function that looks into the cache for dispatched observations
     """
+    observation = None
     extra_dict = {
         ExtraKeys.GundiId: gundi_id,
         ExtraKeys.OutboundIntId: destination_id
     }
-    cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
-    cached_data = _cache_db.get(cache_key)
-    if not cached_data:
-        # ToDo: Try to get this info from the portal in a cache miss
-        return None
-
     try:
+        cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+        cached_data = _cache_db.get(cache_key)
+        if not cached_data:
+            # ToDo: Try to get this info from the portal in a cache miss
+            return None
         observation = dispatcher_schemas.DispatchedObservation.parse_raw(
             cached_data
         )
@@ -327,12 +327,10 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
         logger.error(
             f"ConnectionError while reading dispatched observations from Cache: {e}", extra={**extra_dict}
         )
-        observation = None
     except Exception as e:
         logger.error(
             f"Internal Error while reading dispatched observations from Cache: {e}", extra={**extra_dict}
         )
-        observation = None
     finally:
         return observation
 
