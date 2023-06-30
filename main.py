@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from functions_framework import cloud_event
+from core import tracing
 from core.services import process_event
 
 logger = logging.getLogger(__name__)
