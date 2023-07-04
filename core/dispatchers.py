@@ -234,7 +234,6 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
         return result
 
 
-
 dispatcher_cls_by_type = {
     # Gundi v1
     schemas.StreamPrefixEnum.position: ERPositionDispatcher,

@@ -7,6 +7,7 @@ from gundi_client.schemas import OutboundConfiguration
 from functions_framework.event_conversion import CloudEvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
+from core import schemas
 
 
 def async_return(result):
@@ -19,6 +20,25 @@ def async_return(result):
 def mock_cache(mocker):
     mock_cache = mocker.MagicMock()
     mock_cache.get.return_value = None
+    return mock_cache
+
+
+@pytest.fixture
+def dispatched_event():
+    return schemas.DispatchedObservation(
+        gundi_id="23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+        related_to=None,
+        external_id="ABC123",  # ID returned by the destination system
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        destination_id="338225f3-91f9-4fe1-b013-353a229ce504",
+        delivered_at=datetime.datetime.now()  # UTC
+    )
+
+
+@pytest.fixture
+def mock_cache_with_cached_event(mocker, dispatched_event):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, dispatched_event.json())
     return mock_cache
 
 
@@ -55,11 +75,11 @@ def mock_gundi_client(
 
 @pytest.fixture
 def mock_gundi_client_with_client_connector_error(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
@@ -93,7 +113,14 @@ def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
 
 
 @pytest.fixture
-def mock_erclient_class(mocker, post_sensor_observation_response):
+def mock_erclient_class(
+        mocker,
+        post_sensor_observation_response,
+        post_report_response,
+        post_report_attachment_response,
+        post_camera_trap_report_response,
+        er_client_close_response
+):
     mocked_erclient_class = mocker.MagicMock()
     erclient_mock = mocker.MagicMock()
     erclient_mock.post_sensor_observation.return_value = async_return(
@@ -102,6 +129,9 @@ def mock_erclient_class(mocker, post_sensor_observation_response):
     erclient_mock.post_report.return_value = async_return(
         post_report_response
     )
+    erclient_mock.post_report_attachment.return_value = async_return(
+        post_report_attachment_response
+    )
     erclient_mock.post_camera_trap_report.return_value = async_return(
         post_camera_trap_report_response
     )
@@ -109,6 +139,7 @@ def mock_erclient_class(mocker, post_sensor_observation_response):
         er_client_close_response
     )
     erclient_mock.__aenter__.return_value = erclient_mock
+    erclient_mock.__aexit__.return_value = er_client_close_response
     mocked_erclient_class.return_value = erclient_mock
     return mocked_erclient_class
 
@@ -146,6 +177,11 @@ def post_report_response():
              'user': {'username': 'gundi_serviceaccount', 'first_name': 'Gundi', 'last_name': 'Service Account',
                       'id': '408388d0-bb42-43f2-a2c3-6805bcb5f315', 'content_type': 'accounts.user'},
              'type': 'add_event'}], 'patrols': []}
+
+
+@pytest.fixture
+def post_report_attachment_response():
+    return {}
 
 
 @pytest.fixture
@@ -409,7 +445,8 @@ def mock_gundi_client_v2_class(mocker, mock_gundi_client_v2):
 def destination_integration_v2():
     return schemas_v2.Integration.parse_obj(
         {
-            'id': 'destination_integration_details', 'name': 'ER Load Testing',
+            'id': '338225f3-91f9-4fe1-b013-353a229ce504',
+            'name': 'ER Load Testing',
             'base_url': 'https://gundi-load-testing.pamdas.org', 'enabled': True,
             'type': {'id': '46c66a61-71e4-4664-a7f2-30d465f87aae', 'name': 'EarthRanger',
                      'description': 'Integration type for Earth Ranger Sites', 'actions': [
@@ -455,8 +492,8 @@ def connection_v2():
             'id': 'bbd0946d-15b0-4308-b93d-e0470b6c33b7',
             'provider': {'id': 'bbd0946d-15b0-4308-b93d-e0470b6c33b7', 'name': 'Trap Tagger', 'type': 'traptagger',
                          'base_url': 'https://test.traptagger.com', 'status': 'healthy'}, 'destinations': [
-                {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing', 'type': 'earth_ranger',
-                 'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
+            {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing', 'type': 'earth_ranger',
+             'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
             'routing_rules': [{'id': '945897f9-1ef2-7d55-9c6c-ea2663380ca5', 'name': 'TrapTagger Default Route'}],
             'default_route': {'id': '945897f9-1ef2-7d55-9c6c-ea2663380ca5', 'name': 'TrapTagger Default Route'},
             'owner': {'id': 'b3d1b0fc-69fe-408b-afc5-7f54872730c1', 'name': 'Test Organization', 'description': ''},
@@ -471,10 +508,10 @@ def route_v2():
         {
             'id': '775897f9-1ef2-4d10-9c6c-ea2663380c5b', 'name': 'TrapTagger Default Route',
             'owner': 'b3d1b0fc-69fe-408b-afc5-7f54872730c1', 'data_providers': [
-                {'id': 'ccd0946d-15b0-4308-b93d-e0470b6d33b5', 'name': 'Trap Tagger', 'type': 'traptagger',
-                 'base_url': 'https://test.traptagger.com', 'status': 'healthy'}], 'destinations': [
-                {'id': '228225f3-91f9-4fe1-b013-353a229ce512', 'name': 'ER Load Testing', 'type': 'earth_ranger',
-                 'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
+            {'id': 'ccd0946d-15b0-4308-b93d-e0470b6d33b5', 'name': 'Trap Tagger', 'type': 'traptagger',
+             'base_url': 'https://test.traptagger.com', 'status': 'healthy'}], 'destinations': [
+            {'id': '228225f3-91f9-4fe1-b013-353a229ce512', 'name': 'ER Load Testing', 'type': 'earth_ranger',
+             'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
             'configuration': {'id': '5b3e3e73-94ad-42cb-a765-09a7193ae0b6',
                               'name': 'Trap Tagger to ER - Event Type Mapping', 'data': {'field_mappings': {
                     'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {'ev': {'558225f3-91f9-4fe1-b013-353a229ce503': {
@@ -500,16 +537,48 @@ def event_v2_as_cloud_event():
                 'data': 'eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJsZW9wYXJkX3NpZ2h0aW5nIiwgImV2ZW50X2RldGFpbHMiOiB7InNpdGVfbmFtZSI6ICJDYW1lcmEyQSIsICJzcGVjaWVzIjogIkxlb3BhcmQiLCAidGFncyI6IFsiYWR1bHQiLCAibWFsZSJdLCAiYW5pbWFsX2NvdW50IjogMn0sICJ0aW1lIjogIjIwMjMtMDYtMjMgMDA6NTE6MDArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDIwLjgwNjc4NSwgImxhdGl0dWRlIjogLTU1Ljc4NDk5OH19',
                 'attributes': {
                     "gundi_version": "v2",
-                      "provider_key": "awt",
-                      "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                      "related_to": "None",
-                      "stream_type": "ev",
-                      "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                      "external_source_id": "Xyz123",
-                      "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                      "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                      "annotations": "{}",
-                      "tracing_context": "{}"
+                    "provider_key": "awt",
+                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                    "related_to": "None",
+                    "stream_type": "ev",
+                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                    "external_source_id": "Xyz123",
+                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
+def attachment_v2_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9',
+                'attributes': {
+                    "gundi_version": "v2",
+                    "provider_key": "awt",
+                    "gundi_id": "f1a8894b-ff2e-4286-90a0-8f17303e91df",
+                    "related_to": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                    "stream_type": "att",
+                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                    "external_source_id": "Xyz123",
+                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "annotations": "{}",
+                    "tracing_context": "{}"
                 }
             },
             'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
