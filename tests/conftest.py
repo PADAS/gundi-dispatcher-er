@@ -3,11 +3,10 @@ import aiohttp
 import pytest
 import asyncio
 from aiohttp.client_reqrep import ConnectionKey
-from gundi_client.schemas import OutboundConfiguration
+from gundi_core.schemas import OutboundConfiguration
 from functions_framework.event_conversion import CloudEvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
-from core import schemas
 
 
 def async_return(result):
@@ -25,7 +24,7 @@ def mock_cache(mocker):
 
 @pytest.fixture
 def dispatched_event():
-    return schemas.DispatchedObservation(
+    return schemas_v2.DispatchedObservation(
         gundi_id="23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
         related_to=None,
         external_id="ABC123",  # ID returned by the destination system
