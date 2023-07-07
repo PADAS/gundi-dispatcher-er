@@ -156,6 +156,20 @@ async def dispatch_transformed_observation_v2(
                     ExtraKeys.AttentionNeeded: True,
                 },
             )
+            # Emit events for the portal and other interested services (EDA)
+            await publish_event(
+                event=system_events.ObservationDeliveryFailed(
+                    payload=gundi_schemas_v2.DispatchedObservation(
+                        gundi_id=gundi_id,
+                        related_to=related_to,
+                        external_id=None,  # ID returned by the destination system
+                        data_provider_id=data_provider_id,
+                        destination_id=destination_id,
+                        delivered_at=datetime.now(timezone.utc)  # UTC
+                    )
+                ),
+                topic_name=settings.DISPATCHER_EVENTS_TOPIC
+            )
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
         else:
             # Cache data related to the dispatched observation
@@ -167,7 +181,7 @@ async def dispatch_transformed_observation_v2(
                 external_id=result.get("id"),  # ID returned by the destination system
                 data_provider_id=data_provider_id,
                 destination_id=destination_id,
-                delivered_at=datetime.now()  # UTC
+                delivered_at=datetime.now(timezone.utc)  # UTC
             )
             cache_dispatched_observation(
                 observation=dispatched_observation,
@@ -215,6 +229,7 @@ async def send_observation_to_dead_letter_topic(transformed_observation, attribu
             else:
                 logger.info(f"Observation sent to the dead letter topic successfully.")
                 logger.debug(f"GCP PubSub response: {response}")
+
         current_span.set_attribute("is_sent_to_dead_letter_queue", True)
         current_span.add_event(
             name="routing_service.observation_sent_to_dead_letter_queue"
