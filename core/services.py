@@ -11,12 +11,16 @@ from core.utils import (
     get_outbound_config_detail,
     ExtraKeys,
     get_integration_details,
-    get_dispatched_observation, cache_dispatched_observation, is_null,
+    get_dispatched_observation,
+    cache_dispatched_observation,
+    is_null,
+    publish_event,
 )
+from gundi_core.schemas import v2 as gundi_schemas_v2
+from gundi_core import events as system_events
 from .errors import DispatcherException, ReferenceDataError
 from . import tracing
 from . import settings
-from . import schemas
 
 
 logger = logging.getLogger(__name__)
@@ -157,7 +161,7 @@ async def dispatch_transformed_observation_v2(
             # Cache data related to the dispatched observation
             if isinstance(result, list):
                 result = result[0]
-            dispatched_observation = schemas.DispatchedObservation(
+            dispatched_observation = gundi_schemas_v2.DispatchedObservation(
                 gundi_id=gundi_id,
                 related_to=related_to,
                 external_id=result.get("id"),  # ID returned by the destination system
@@ -169,7 +173,13 @@ async def dispatch_transformed_observation_v2(
                 observation=dispatched_observation,
                 destination=destination_integration
             )
-            # ToDo: Emit events for the portal?
+            # Emit events for the portal and other interested services (EDA)
+            await publish_event(
+                event=system_events.ObservationDelivered(
+                    payload=dispatched_observation
+                ),
+                topic_name=settings.DISPATCHER_EVENTS_TOPIC
+            )
 
 
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):

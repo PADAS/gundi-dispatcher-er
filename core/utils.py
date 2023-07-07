@@ -1,18 +1,21 @@
 # ToDo: Move base classes or utils into the SDK
+import asyncio
 import base64
 import json
 import aiohttp
 import logging
 import walrus
+import backoff
 from uuid import UUID
 from enum import Enum
 from gundi_core import schemas as gundi_schemas
 from gundi_core.schemas import v2 as gundi_schemas_v2
+from gundi_core.events import SystemEventBaseModel
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
 from redis import exceptions as redis_exceptions
+from gcloud.aio import pubsub
 from . import settings
-from . import schemas as dispatcher_schemas
 from .errors import ReferenceDataError
 
 
@@ -305,7 +308,7 @@ async def get_integration_details(integration_id: str) -> gundi_schemas.v2.Integ
             return integration
 
 
-def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher_schemas.DispatchedObservation:
+def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_schemas_v2.DispatchedObservation:
     """
     Helper function that looks into the cache for dispatched observations
     """
@@ -320,7 +323,7 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
         if not cached_data:
             # ToDo: Try to get this info from the portal in a cache miss
             return None
-        observation = dispatcher_schemas.DispatchedObservation.parse_raw(
+        observation = gundi_schemas_v2.DispatchedObservation.parse_raw(
             cached_data
         )
     except redis_exceptions.ConnectionError as e:
@@ -336,7 +339,7 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
 
 
 def cache_dispatched_observation(
-        observation: dispatcher_schemas.DispatchedObservation,
+        observation: gundi_schemas_v2.DispatchedObservation,
         destination: gundi_schemas_v2.Integration
 ):
     try:
@@ -413,3 +416,30 @@ def find_config_for_action(configurations, action_value):
         ),
         None
     )
+
+
+# Events for other services or system components
+@backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=5)
+async def publish_event(event: SystemEventBaseModel, topic_name: str):
+    timeout_settings = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(
+            raise_for_status=True, timeout=timeout_settings
+    ) as session:
+        client = pubsub.PublisherClient(session=session)
+        # Get the topic
+        topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+        # Prepare the payload
+        binary_payload = json.dumps(event.dict(), default=str).encode("utf-8")
+        messages = [pubsub.PubsubMessage(binary_payload)]
+        logger.debug(f"Sending event {event} to PubSub topic {topic_name}..")
+        try:  # Send to pubsub
+            response = await client.publish(topic, messages)
+        except Exception as e:
+            logger.exception(
+                f"Error publishing system event topic {topic_name}: {e}. This will be retried."
+            )
+            raise e
+        else:
+            logger.debug(f"System event {event} published successfully.")
+            logger.debug(f"GCP PubSub response: {response}")
+

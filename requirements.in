@@ -18,3 +18,4 @@ gcloud-aio-pubsub==5.2.0
 pytest==7.2.1
 pytest-asyncio==0.20.3
 pytest-mock==3.10.0
+backoff==2.2
