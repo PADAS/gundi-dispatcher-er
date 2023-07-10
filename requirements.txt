@@ -40,7 +40,7 @@ cffi==1.15.1
     # via cryptography
 chardet==5.1.0
     # via gcloud-aio-auth
-charset-normalizer==3.1.0
+charset-normalizer==3.2.0
     # via
     #   aiohttp
     #   requests
@@ -133,7 +133,7 @@ gundi-client==1.0.1
     #   cdip-connector
 gundi-client-v2==2.0.1
     # via -r requirements.in
-gundi-core==1.0.5
+gundi-core==1.1.1
     # via
     #   -r requirements.in
     #   cdip-connector
@@ -244,7 +244,7 @@ pillow==9.5.0
     # via cdip-connector
 pluggy==1.2.0
     # via pytest
-prometheus-client==0.17.0
+prometheus-client==0.17.1
     # via gcloud-aio-pubsub
 proto-plus==1.22.3
     # via
@@ -355,7 +355,7 @@ wrapt==1.15.0
     #   opentelemetry-instrumentation-confluent-kafka
 yarl==1.9.2
     # via aiohttp
-zipp==3.15.0
+zipp==3.16.0
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
