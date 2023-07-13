@@ -3,11 +3,14 @@ import aiohttp
 import pytest
 import asyncio
 from aiohttp.client_reqrep import ConnectionKey
+from erclient import ERClientServiceUnavailable
 from gundi_core.schemas import OutboundConfiguration
 from functions_framework.event_conversion import CloudEvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
-
+from gundi_core import events as system_events
+from gcloud.aio import pubsub
+from core import settings
 
 def async_return(result):
     f = asyncio.Future()
@@ -103,11 +106,37 @@ def mock_gundi_client_with_client_connector_error(
 
 
 @pytest.fixture
-def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
+def observation_delivered_pubsub_message():
+    return pubsub.PubsubMessage(
+        b'{"event_id": "c05cf942-f543-4798-bd91-0e38a63d655e", "timestamp": "2023-07-12 20:34:07.210731+00:00", "schema_version": "v1", "payload": {"gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638", "related_to": "None", "external_id": "7f42ab47-fa7a-4a7e-acc6-cadcaa114646", "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504", "delivered_at": "2023-07-12 20:34:07.210542+00:00"}, "event_type": "ObservationDelivered"}'
+    )
+
+
+@pytest.fixture
+def mock_pubsub_client(mocker, observation_delivered_pubsub_message, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     mock_publisher.publish.return_value = async_return(gcp_pubsub_publish_response)
+    mock_publisher.topic_path.return_value = f"projects/{settings.GCP_PROJECT_ID}/topics/{settings.DISPATCHER_EVENTS_TOPIC}"
     mock_client.PublisherClient.return_value = mock_publisher
+    mock_client.PubsubMessage.return_value = observation_delivered_pubsub_message
+    return mock_client
+
+
+@pytest.fixture
+def observation_delivery_failure_pubsub_message():
+    return pubsub.PubsubMessage(
+        b'{"event_id": "a13c5742-8199-404b-a41b-f520d7462d74", "timestamp": "2023-07-13 14:17:13.323863+00:00", "schema_version": "v1", "payload": {"gundi_id": "9f86ae28-99c4-473f-be13-fb92bd0bc341", "related_to": null, "external_id": null, "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504", "delivered_at": "2023-07-13 14:17:13.323706+00:00"}, "event_type": "ObservationDeliveryFailed"}'    )
+
+
+@pytest.fixture
+def mock_pubsub_client_with_observation_delivery_failure(mocker, observation_delivery_failure_pubsub_message, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    mock_publisher = mocker.MagicMock()
+    mock_publisher.publish.return_value = async_return(gcp_pubsub_publish_response)
+    mock_publisher.topic_path.return_value = f"projects/{settings.GCP_PROJECT_ID}/topics/{settings.DISPATCHER_EVENTS_TOPIC}"
+    mock_client.PublisherClient.return_value = mock_publisher
+    mock_client.PubsubMessage.return_value = observation_delivery_failure_pubsub_message
     return mock_client
 
 
@@ -137,6 +166,29 @@ def mock_erclient_class(
     erclient_mock.close.return_value = async_return(
         er_client_close_response
     )
+    erclient_mock.__aenter__.return_value = erclient_mock
+    erclient_mock.__aexit__.return_value = er_client_close_response
+    mocked_erclient_class.return_value = erclient_mock
+    return mocked_erclient_class
+
+
+@pytest.fixture
+def mock_erclient_class_with_service_unavailable_error(
+        mocker,
+        post_sensor_observation_response,
+        post_report_response,
+        post_report_attachment_response,
+        post_camera_trap_report_response,
+        er_client_close_response
+):
+    mocked_erclient_class = mocker.MagicMock()
+    erclient_mock = mocker.MagicMock()
+    error = ERClientServiceUnavailable('ER service unavailable')
+    erclient_mock.post_sensor_observation.side_effect = error
+    erclient_mock.post_report.side_effect = error
+    erclient_mock.post_report_attachment.side_effect = error
+    erclient_mock.post_camera_trap_report.side_effect = error
+    erclient_mock.close.side_effect = error
     erclient_mock.__aenter__.return_value = erclient_mock
     erclient_mock.__aexit__.return_value = er_client_close_response
     mocked_erclient_class.return_value = erclient_mock
@@ -582,4 +634,23 @@ def attachment_v2_as_cloud_event():
             },
             'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
         }
+    )
+
+
+@pytest.fixture
+def dispatched_observation():
+    return schemas_v2.DispatchedObservation(
+        gundi_id="23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+        related_to=None,
+        external_id="37314d00-731f-427c-aaa5-336daf13f904",  # ID returned by the destination system
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        destination_id="338225f3-91f9-4fe1-b013-353a229ce504",
+        delivered_at=datetime.datetime.now(datetime.timezone.utc)
+    )
+
+
+@pytest.fixture
+def observation_delivered_event(dispatched_observation):
+    return system_events.ObservationDelivered(
+        payload=dispatched_observation
     )
