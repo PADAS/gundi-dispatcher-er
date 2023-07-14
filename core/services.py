@@ -120,7 +120,7 @@ async def dispatch_transformed_observation_v2(
     # Check for related observations
     if not is_null(related_to):
         # Check if the related object was dispatched
-        related_observation = get_dispatched_observation(gundi_id=related_to, destination_id=destination_id)
+        related_observation = await get_dispatched_observation(gundi_id=related_to, destination_id=destination_id)
         if not related_observation:
             logger.error(
                 f"Error getting related observation. Will retry later.",
@@ -183,10 +183,7 @@ async def dispatch_transformed_observation_v2(
                 destination_id=destination_id,
                 delivered_at=datetime.now(timezone.utc)  # UTC
             )
-            cache_dispatched_observation(
-                observation=dispatched_observation,
-                destination=destination_integration
-            )
+            cache_dispatched_observation(observation=dispatched_observation)
             # Emit events for the portal and other interested services (EDA)
             await publish_event(
                 event=system_events.ObservationDelivered(

@@ -308,7 +308,7 @@ async def get_integration_details(integration_id: str) -> gundi_schemas.v2.Integ
             return integration
 
 
-def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_schemas_v2.DispatchedObservation:
+async def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_schemas_v2.DispatchedObservation:
     """
     Helper function that looks into the cache for dispatched observations
     """
@@ -320,12 +320,47 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_sche
     try:
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
         cached_data = _cache_db.get(cache_key)
-        if not cached_data:
-            # ToDo: Try to get this info from the portal in a cache miss
-            return None
-        observation = gundi_schemas_v2.DispatchedObservation.parse_raw(
-            cached_data
-        )
+        if cached_data:
+            observation = gundi_schemas_v2.DispatchedObservation.parse_raw(
+                cached_data
+            )
+        else:  # Try to rebuild the cache entry
+            # Retrieve traces from the portal
+            logger.debug(f"Cache miss for dispatched observation.", extra={**extra_dict})
+            connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+            async with GundiClient(
+                    connect_timeout=connect_timeout, data_timeout=read_timeout
+            ) as portal_v2:
+                try:
+                    filters = {
+                        "object_id": gundi_id,
+                        "destination_id": destination_id,
+                    }
+                    traces = await portal_v2.get_traces(params=filters)
+                    observation_trace = traces[0]
+                # ToDo: Catch more specific exceptions once the gundi client supports them
+                except Exception as e:
+                    error_msg = f"Error retrieving traces from the portal (v2): {e}"
+                    logger.error(
+                        error_msg,
+                        extra={
+                            **extra_dict,
+                            **filters
+                        },
+                    )
+                    return None
+                else:
+                    # Rebuild from the trace
+                    observation = gundi_schemas_v2.DispatchedObservation(
+                        gundi_id=observation_trace.object_id,
+                        related_to=observation_trace.related_to,
+                        external_id=observation_trace.external_id,
+                        data_provider_id=observation_trace.data_provider,
+                        destination_id=observation_trace.destination,
+                        delivered_at=observation_trace.delivered_at
+                    )
+                    # Save in cache again
+                    cache_dispatched_observation(observation=observation)
     except redis_exceptions.ConnectionError as e:
         logger.error(
             f"ConnectionError while reading dispatched observations from Cache: {e}", extra={**extra_dict}
@@ -340,11 +375,14 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_sche
 
 def cache_dispatched_observation(
         observation: gundi_schemas_v2.DispatchedObservation,
-        destination: gundi_schemas_v2.Integration
 ):
     try:
         gundi_id = str(observation.gundi_id)
-        destination_id = str(destination.id)
+        destination_id = str(observation.destination_id)
+
+        if not gundi_id or not destination_id:
+            return  # Can't build the key
+
         extra_dict = {
             ExtraKeys.GundiId: gundi_id,
             ExtraKeys.OutboundIntId: destination_id

@@ -3,24 +3,24 @@ curl localhost:8080 \
   -H "Content-Type: application/json" \
   -H "ce-id: 123451234512345" \
   -H "ce-specversion: 1.0" \
-  -H "ce-time: 2023-07-10T12:01:56.789Z" \
+  -H "ce-time: 2023-07-14T10:01:56.789Z" \
   -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
   -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
-        "data":"eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJsZW9wYXJkX3NpZ2h0aW5nIiwgImV2ZW50X2RldGFpbHMiOiB7InNpdGVfbmFtZSI6ICJDYW1lcmEyQSIsICJzcGVjaWVzIjogIkxlb3BhcmQiLCAidGFncyI6IFsiYWR1bHQiLCAibWFsZSJdLCAiYW5pbWFsX2NvdW50IjogMn0sICJ0aW1lIjogIjIwMjMtMDYtMjMgMDA6NTE6MDArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDIwLjgwNjc4NSwgImxhdGl0dWRlIjogLTU1Ljc4NDk5OH19",
+        "data":"eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9",
         "attributes":{
           "gundi_version":"v2",
-          "provider_key":"awt",
-          "gundi_id":"92855c84-572b-42ae-8183-8deb33fdd476",
-          "related_to": null,
-          "stream_type":"ev",
-          "source_id":"afa0d606-c143-4705-955d-68133645db6d",
-          "external_source_id":"Xyz123",
+          "provider_key":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+          "gundi_id":"e6795790-4a5f-4d47-ac93-de7d7713698b",
+          "related_to":"92855c84-572b-42ae-8183-8deb33fdd476",
+          "stream_type":"att",
+          "source_id":"None",
+          "external_source_id":"None",
           "destination_id":"338225f3-91f9-4fe1-b013-353a229ce504",
           "data_provider_id":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-          "annotations":"{}",
-          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
+          "annotations":"null",
+          "tracing_context":"{}"
         }
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
@@ -51,17 +51,19 @@ curl localhost:8080 \
 #        "data":"eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9",
 #        "attributes":{
 #          "gundi_version":"v2",
-#          "provider_key":"awt",
-#          "gundi_id":"f1a8894b-ff2e-4286-90a0-8f17303e91df",
-#          "related_to":"23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+#          "provider_key":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+#          "gundi_id":"e6795790-4a5f-4d47-ac93-de7d7713698b",
+#          "related_to":"13632f77-6858-4721-8603-64138a9f38aa",
 #          "stream_type":"att",
 #          "source_id":"None",
 #          "external_source_id":"None",
 #          "destination_id":"338225f3-91f9-4fe1-b013-353a229ce504",
 #          "data_provider_id":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
 #          "annotations":"null",
-#          "tracing_context":"{\"x-cloud-trace-context\": \"09e03ec9ede52eb3993dd406dbff8654/10056107240989156828;o=1\"}"
+#          "tracing_context":"{}"
 #        }
+#      },
+#      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
 # Gundi v1
 #  -d '{
