@@ -1,18 +1,21 @@
 # ToDo: Move base classes or utils into the SDK
+import asyncio
 import base64
 import json
 import aiohttp
 import logging
 import walrus
+import backoff
 from uuid import UUID
 from enum import Enum
 from gundi_core import schemas as gundi_schemas
 from gundi_core.schemas import v2 as gundi_schemas_v2
+from gundi_core.events import SystemEventBaseModel
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
 from redis import exceptions as redis_exceptions
+from gcloud.aio import pubsub
 from . import settings
-from . import schemas as dispatcher_schemas
 from .errors import ReferenceDataError
 
 
@@ -305,7 +308,7 @@ async def get_integration_details(integration_id: str) -> gundi_schemas.v2.Integ
             return integration
 
 
-def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher_schemas.DispatchedObservation:
+async def get_dispatched_observation(gundi_id: str, destination_id: str) -> gundi_schemas_v2.DispatchedObservation:
     """
     Helper function that looks into the cache for dispatched observations
     """
@@ -317,12 +320,47 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
     try:
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
         cached_data = _cache_db.get(cache_key)
-        if not cached_data:
-            # ToDo: Try to get this info from the portal in a cache miss
-            return None
-        observation = dispatcher_schemas.DispatchedObservation.parse_raw(
-            cached_data
-        )
+        if cached_data:
+            observation = gundi_schemas_v2.DispatchedObservation.parse_raw(
+                cached_data
+            )
+        else:  # Try to rebuild the cache entry
+            # Retrieve traces from the portal
+            logger.debug(f"Cache miss for dispatched observation.", extra={**extra_dict})
+            connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+            async with GundiClient(
+                    connect_timeout=connect_timeout, data_timeout=read_timeout
+            ) as portal_v2:
+                try:
+                    filters = {
+                        "object_id": gundi_id,
+                        "destination_id": destination_id,
+                    }
+                    traces = await portal_v2.get_traces(params=filters)
+                    observation_trace = traces[0]
+                # ToDo: Catch more specific exceptions once the gundi client supports them
+                except Exception as e:
+                    error_msg = f"Error retrieving traces from the portal (v2): {e}"
+                    logger.error(
+                        error_msg,
+                        extra={
+                            **extra_dict,
+                            **filters
+                        },
+                    )
+                    return None
+                else:
+                    # Rebuild from the trace
+                    observation = gundi_schemas_v2.DispatchedObservation(
+                        gundi_id=observation_trace.object_id,
+                        related_to=observation_trace.related_to,
+                        external_id=observation_trace.external_id,
+                        data_provider_id=observation_trace.data_provider,
+                        destination_id=observation_trace.destination,
+                        delivered_at=observation_trace.delivered_at
+                    )
+                    # Save in cache again
+                    cache_dispatched_observation(observation=observation)
     except redis_exceptions.ConnectionError as e:
         logger.error(
             f"ConnectionError while reading dispatched observations from Cache: {e}", extra={**extra_dict}
@@ -336,12 +374,15 @@ def get_dispatched_observation(gundi_id: str, destination_id: str) -> dispatcher
 
 
 def cache_dispatched_observation(
-        observation: dispatcher_schemas.DispatchedObservation,
-        destination: gundi_schemas_v2.Integration
+        observation: gundi_schemas_v2.DispatchedObservation,
 ):
     try:
         gundi_id = str(observation.gundi_id)
-        destination_id = str(destination.id)
+        destination_id = str(observation.destination_id)
+
+        if not gundi_id or not destination_id:
+            return  # Can't build the key
+
         extra_dict = {
             ExtraKeys.GundiId: gundi_id,
             ExtraKeys.OutboundIntId: destination_id
@@ -413,3 +454,30 @@ def find_config_for_action(configurations, action_value):
         ),
         None
     )
+
+
+# Events for other services or system components
+@backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=5)
+async def publish_event(event: SystemEventBaseModel, topic_name: str):
+    timeout_settings = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(
+            raise_for_status=True, timeout=timeout_settings
+    ) as session:
+        client = pubsub.PublisherClient(session=session)
+        # Get the topic
+        topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+        # Prepare the payload
+        binary_payload = json.dumps(event.dict(), default=str).encode("utf-8")
+        messages = [pubsub.PubsubMessage(binary_payload)]
+        logger.debug(f"Sending event {event} to PubSub topic {topic_name}..")
+        try:  # Send to pubsub
+            response = await client.publish(topic, messages)
+        except Exception as e:
+            logger.exception(
+                f"Error publishing system event topic {topic_name}: {e}. This will be retried."
+            )
+            raise e
+        else:
+            logger.debug(f"System event {event} published successfully.")
+            logger.debug(f"GCP PubSub response: {response}")
+

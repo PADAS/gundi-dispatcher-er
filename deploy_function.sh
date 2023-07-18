@@ -11,8 +11,8 @@ PUBSUB_TOPIC_ID=$2
 SERVICE_ACCOUNT=$3
 # Extra settings. # ToDo: get this settings from the outbound config?
 REGION="us-central1"
-MIN_INSTANCES=1
-MAX_INSTANCES=2
+MIN_INSTANCES=0
+MAX_INSTANCES=1
 CPU=1
 CONCURRENCY=4
 
@@ -21,14 +21,14 @@ gcloud beta functions deploy $FUNCTION_NAME \
     --gen2 \
     --service-account=$SERVICE_ACCOUNT \
     --region=$REGION \
-    --vpc-connector=cdip-dev-cloudrun-connect \
+    --vpc-connector=cdip-cloudrun-connector \
     --source=. \
     --runtime=python38 \
     --entry-point=main \
     --memory=256Mi \
     --trigger-event="google.cloud.pubsub.topic.v1.messagePublished" \
     --trigger-resource=$PUBSUB_TOPIC_ID \
-    --env-vars-file=.env.yaml \
+    --env-vars-file=.env.dev.yaml \
     --min-instances=$MIN_INSTANCES \
     --max-instances=$MAX_INSTANCES \
     --concurrency=$CONCURRENCY \

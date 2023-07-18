@@ -8,7 +8,7 @@ aiohttp==3.8.4
     # via gcloud-aio-auth
 aiosignal==1.3.1
     # via aiohttp
-anyio==3.7.0
+anyio==3.7.1
     # via httpcore
 async-timeout==4.0.2
     # via
@@ -18,8 +18,9 @@ attrs==23.1.0
     # via
     #   aiohttp
     #   pytest
-backoff==2.2.1
+backoff==2.2.0
     # via
+    #   -r requirements.in
     #   gcloud-aio-auth
     #   opentelemetry-exporter-otlp-proto-http
 backports-zoneinfo==0.2.1
@@ -39,11 +40,11 @@ cffi==1.15.1
     # via cryptography
 chardet==5.1.0
     # via gcloud-aio-auth
-charset-normalizer==3.1.0
+charset-normalizer==3.2.0
     # via
     #   aiohttp
     #   requests
-click==8.1.3
+click==8.1.5
     # via
     #   flask
     #   functions-framework
@@ -51,7 +52,7 @@ cloudevents==1.9.0
     # via functions-framework
 confluent-kafka==1.9.2
     # via cdip-connector
-cryptography==41.0.1
+cryptography==41.0.2
     # via gcloud-aio-auth
 dateparser==1.1.8
     # via earthranger-client
@@ -72,7 +73,7 @@ exceptiongroup==1.1.2
     #   pytest
 flask==2.3.2
     # via functions-framework
-frozenlist==1.3.3
+frozenlist==1.4.0
     # via
     #   aiohttp
     #   aiosignal
@@ -88,18 +89,18 @@ google-api-core[grpc]==2.11.1
     #   google-cloud-pubsub
     #   google-cloud-storage
     #   google-cloud-trace
-google-auth==2.21.0
+google-auth==2.22.0
     # via
     #   google-api-core
     #   google-cloud-core
     #   google-cloud-storage
-google-cloud-core==2.3.2
+google-cloud-core==2.3.3
     # via google-cloud-storage
-google-cloud-pubsub==2.17.1
+google-cloud-pubsub==2.18.0
     # via cdip-connector
 google-cloud-storage==1.44.0
     # via cdip-connector
-google-cloud-trace==1.11.1
+google-cloud-trace==1.11.2
     # via opentelemetry-exporter-gcp-trace
 google-crc32c==1.5.0
     # via google-resumable-media
@@ -130,9 +131,9 @@ gundi-client==1.0.1
     # via
     #   -r requirements.in
     #   cdip-connector
-gundi-client-v2==2.0.1
+gundi-client-v2==2.1.0
     # via -r requirements.in
-gundi-core==1.0.5
+gundi-core==1.2.0
     # via
     #   -r requirements.in
     #   cdip-connector
@@ -142,7 +143,7 @@ gunicorn==20.1.0
     # via functions-framework
 h11==0.14.0
     # via httpcore
-httpcore==0.17.2
+httpcore==0.17.3
     # via httpx
 httpx==0.24.1
     # via
@@ -156,7 +157,7 @@ idna==3.4
     #   httpx
     #   requests
     #   yarl
-importlib-metadata==6.7.0
+importlib-metadata==6.8.0
     # via flask
 iniconfig==2.0.0
     # via pytest
@@ -243,13 +244,13 @@ pillow==9.5.0
     # via cdip-connector
 pluggy==1.2.0
     # via pytest
-prometheus-client==0.17.0
+prometheus-client==0.17.1
     # via gcloud-aio-pubsub
 proto-plus==1.22.3
     # via
     #   google-cloud-pubsub
     #   google-cloud-trace
-protobuf==4.23.3
+protobuf==4.23.4
     # via
     #   google-api-core
     #   google-cloud-pubsub
@@ -354,7 +355,7 @@ wrapt==1.15.0
     #   opentelemetry-instrumentation-confluent-kafka
 yarl==1.9.2
     # via aiohttp
-zipp==3.15.0
+zipp==3.16.1
     # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
