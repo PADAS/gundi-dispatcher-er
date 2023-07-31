@@ -3,23 +3,23 @@ curl localhost:8080 \
   -H "Content-Type: application/json" \
   -H "ce-id: 123451234512345" \
   -H "ce-specversion: 1.0" \
-  -H "ce-time: 2023-07-14T10:01:56.789Z" \
+  -H "ce-time: 2023-07-31T10:01:56.789Z" \
   -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
   -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
-        "data":"eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9",
+        "data":"eyJ0aXRsZSI6ICJXaWxkZG9nIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiBudWxsLCAiZXZlbnRfZGV0YWlscyI6IHsic2l0ZV9uYW1lIjogIkNhbWVyYTJNIiwgInNwZWNpZXMiOiAiV2lsZGRvZyIsICJ0YWdzIjogWyJhZHVsdCIsICJtYWxlIl0sICJhbmltYWxfY291bnQiOiAxfSwgInRpbWUiOiAiMjAyMy0wNy0zMSAxNDowODowMCswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTcyLjcwNDQzNSwgImxhdGl0dWRlIjogLTUxLjY4ODY0OX0sICIiOiBudWxsfQ==",
         "attributes":{
           "gundi_version":"v2",
           "provider_key":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-          "gundi_id":"e6795790-4a5f-4d47-ac93-de7d7713698b",
-          "related_to":"92855c84-572b-42ae-8183-8deb33fdd476",
-          "stream_type":"att",
-          "source_id":"None",
-          "external_source_id":"None",
+          "gundi_id":"35a9c36b-e566-4365-af87-c0caa9323b3d",
+          "related_to": "None",
+          "stream_type":"ev",
+          "source_id":"afa0d606-c143-4705-955d-68133645db6d",
+          "external_source_id":"Xyz123",
           "destination_id":"338225f3-91f9-4fe1-b013-353a229ce504",
           "data_provider_id":"ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-          "annotations":"null",
+          "annotations":"{}",
           "tracing_context":"{}"
         }
       },
