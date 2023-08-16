@@ -3,49 +3,47 @@ name: Upload to GCS
 on:
   push:
     branches:
-        - pipeline
-    # tags:
-    #   - 'v*'
+        - main
+        - release
 
 jobs:
   vars:
     runs-on: ubuntu-latest
     outputs:
-      tag_name: ${{ steps.vars.outputs.tag_name }}
+      file_name: ${{ steps.vars.outputs.file_name }}
     steps:
+      - uses: actions/checkout@v3
       - id: vars
         run: |
-          echo "tag_name=er-dispatcher-src-${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "file_name=er-dispatcher-src-${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-  build:
-    runs-on: ubuntu-latest
+  zip:
+    uses: PADAS/gundi-workflows/.github/workflows/zip_files.yml@main
     needs: vars
-    steps:
-    - uses: actions/checkout@v3
-    - name: Zip files
-      run: |
-        zip -r "${{ needs.vars.outputs.tag_name }}.zip" *
-    - uses: actions/upload-artifact@v3
-      with:
-        name: build-artifact-dev
-        path: ${{ needs.vars.outputs.tag_name }}.zip
-  
-  deploy:
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-    runs-on: ubuntu-latest
-    environment: dev
-    needs: [vars, build]
-    steps:
-      - uses: actions/download-artifact@v3
-        with:
-          name: build-artifact-dev
-      - uses: 'google-github-actions/auth@v1'
-        with:
-          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.SERVICE_ACCOUNT }}
-      - uses: 'google-github-actions/setup-gcloud@v1'
-      - name: Upload to Google Cloud Storage
-        run: |
-          gsutil cp "${{ needs.vars.outputs.tag_name }}.zip" gs://${{ vars.BUCKET }}/
+    with:
+      input_files: "*"
+      output_file: ${{ needs.vars.outputs.file_name }}
+
+  upload_dev:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/main')
+    needs: [vars, zip]
+    with:
+      environment: dev
+      file_name: ${{ needs.vars.outputs.file_name }}
+
+  upload_stage:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/release')
+    needs: [vars, zip]
+    with:
+      environment: stage
+      file_name: ${{ needs.vars.outputs.file_name }}
+
+  upload_prod:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/release')
+    needs: [vars, zip, upload_stage]
+    with:
+      environment: prod
+      file_name: ${{ needs.vars.outputs.file_name }}
