@@ -1,0 +1,49 @@
+name: Upload to GCS
+
+on:
+  push:
+    branches:
+        - main
+        - release
+
+jobs:
+  vars:
+    runs-on: ubuntu-latest
+    outputs:
+      file_name: ${{ steps.vars.outputs.file_name }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: vars
+        run: |
+          echo "file_name=er-dispatcher-src-${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  zip:
+    uses: PADAS/gundi-workflows/.github/workflows/zip_files.yml@main
+    needs: vars
+    with:
+      input_files: "*"
+      output_file: ${{ needs.vars.outputs.file_name }}
+
+  upload_dev:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/main')
+    needs: [vars, zip]
+    with:
+      environment: dev
+      file_name: ${{ needs.vars.outputs.file_name }}
+
+  upload_stage:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/release')
+    needs: [vars, zip]
+    with:
+      environment: stage
+      file_name: ${{ needs.vars.outputs.file_name }}
+
+  upload_prod:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/release')
+    needs: [vars, zip, upload_stage]
+    with:
+      environment: prod
+      file_name: ${{ needs.vars.outputs.file_name }}
