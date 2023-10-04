@@ -48,3 +48,11 @@ jobs:
     with:
       environment: prod
       file_name: ${{ needs.vars.outputs.file_name }}
+
+  upload_feature_prod:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    if: startsWith(github.ref, 'refs/heads/SIK-2456')
+    needs: [vars, zip, upload_stage]
+    with:
+      environment: prod
+      file_name: ${{ needs.vars.outputs.file_name }}
