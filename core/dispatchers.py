@@ -234,6 +234,24 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
         return result
 
 
+class ERObservationDispatcher(ERDispatcherV2):
+
+    async def send(self, messages: Union[list, dict], **kwargs):
+        results = []
+        if isinstance(messages, dict):
+            messages = [messages]
+
+        async with self.er_client as client:
+            for m in messages:
+                try:
+                    results.append(await client.post_sensor_observation(m))
+                except Exception as ex:
+                    logger.exception(f"exception raised sending to dest {ex}")
+                    raise ex
+        return results
+
+
+
 dispatcher_cls_by_type = {
     # Gundi v1
     schemas.StreamPrefixEnum.position: ERPositionDispatcher,
@@ -241,5 +259,6 @@ dispatcher_cls_by_type = {
     schemas.StreamPrefixEnum.camera_trap: ERCameraTrapDispatcher,
     # Gundi v2
     schemas.v2.StreamPrefixEnum.event: EREventDispatcher,
-    schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher
+    schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher,
+    schemas.StreamPrefixEnum.observation: ERObservationDispatcher
 }
