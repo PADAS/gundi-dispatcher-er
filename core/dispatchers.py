@@ -260,5 +260,5 @@ dispatcher_cls_by_type = {
     # Gundi v2
     schemas.v2.StreamPrefixEnum.event: EREventDispatcher,
     schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher,
-    schemas.StreamPrefixEnum.observation: ERObservationDispatcher
+    schemas.v2.StreamPrefixEnum.observation: ERObservationDispatcher
 }
