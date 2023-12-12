@@ -558,6 +558,68 @@ def event_v2_as_cloud_event():
         }
     )
 
+@pytest.fixture
+def event_v2_with_provider_key_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJ3aWxkbGlmZV9zaWdodGluZ19yZXAiLCAiZXZlbnRfZGV0YWlscyI6IHsic2l0ZV9uYW1lIjogIkNhbWVyYTJNIiwgInNwZWNpZXMiOiAibGlvbiIsICJ0YWdzIjogWyJhZHVsdCIsICJtYWxlIl0sICJhbmltYWxfY291bnQiOiAyfSwgInRpbWUiOiAiMjAyMy0xMi0wNyAxNDoyNTowMCswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTcyLjcwNDQ1NSwgImxhdGl0dWRlIjogLTUxLjY4ODY1OH0sICJwcm92aWRlcl9rZXkiOiAibWFwaXBlZGlhIn0=',
+                'attributes': {
+                    "gundi_version": "v2",
+                    "provider_key": "gundi_traptagger_f870e228-4a65-40f0-888c-41bdc1124c3c",
+                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                    "related_to": "None",
+                    "stream_type": "ev",
+                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                    "external_source_id": "Xyz123",
+                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
+def observation_v2_with_provider_key_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJtYW51ZmFjdHVyZXJfaWQiOiAiQ0VMMDA3IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAidGVzdC1kZXZpY2UtMDA3IiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTItMDcgMTU6MzU6MTgrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NTMsICJsYXQiOiAtNTEuNjg4MjQyfSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiAzMH0sICJzdWJqZWN0X3N1YnR5cGUiOiAiY2VsbHN0b3AtdmVoaWNsZSIsICJwcm92aWRlcl9rZXkiOiAibWFwaXBlZGlhIn0=',
+                'attributes': {
+                    "gundi_version": "v2",
+                    "provider_key": "gundi_cellstop_f870e228-4a65-40f0-888c-41bdc1124c3c",
+                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                    "related_to": "None",
+                    "stream_type": "obv",
+                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                    "external_source_id": "Xyz123",
+                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
 
 @pytest.fixture
 def observation_v2_as_cloud_event():

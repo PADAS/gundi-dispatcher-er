@@ -362,7 +362,7 @@ async def process_transformed_observation_v2(transformed_observation, attributes
         try:
             source_id = attributes.get("external_source_id")
             data_provider_id = attributes.get("data_provider_id")
-            provider_key = attributes.get("provider_key")
+            provider_key = transformed_observation.pop("provider_key", attributes.get("provider_key"))
             destination_id = attributes.get("destination_id")
             gundi_id = attributes.get("gundi_id")
             related_to = attributes.get("related_to")
