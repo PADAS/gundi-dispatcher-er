@@ -42,7 +42,7 @@ class ERDispatcher(Dispatcher, ABC):
         url_parse = urlparse(config.endpoint)
 
         return AsyncERClient(
-            service_root=config.endpoint,
+            service_root=config.endpoint.strip('/'),
             username=config.login,
             password=config.password,
             token=config.token,
@@ -169,7 +169,7 @@ class ERDispatcherV2(DispatcherV2, ABC):
             )
         auth_config = schemas.v2.ERAuthActionConfig.parse_obj(integration_action_config.data)
         return AsyncERClient(
-            service_root=f"{integration.base_url}/api/v1.0",
+            service_root=f"{integration.base_url.strip('/')}/api/v1.0",
             username=auth_config.username,
             password=auth_config.password,
             token=auth_config.token,
