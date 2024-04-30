@@ -41,8 +41,12 @@ class ERDispatcher(Dispatcher, ABC):
         provider_key = provider
         url_parse = urlparse(config.endpoint)
 
+        # Check for https
+        if url_parse.scheme == "http":
+            url_parse.scheme = "https"
+
         return AsyncERClient(
-            service_root=config.endpoint.strip('/'),
+            service_root=f"{url_parse.scheme}://{url_parse.hostname}",
             username=config.login,
             password=config.password,
             token=config.token,
@@ -157,6 +161,9 @@ class ERDispatcherV2(DispatcherV2, ABC):
     ) -> AsyncERClient:
         provider_key = provider
         url_parse = urlparse(integration.base_url)
+        # Check for https
+        if url_parse.scheme == "http":
+            url_parse.scheme = "https"
         # Look for the configuration of the authentication action
         configurations = integration.configurations
         integration_action_config = find_config_for_action(
@@ -169,7 +176,7 @@ class ERDispatcherV2(DispatcherV2, ABC):
             )
         auth_config = schemas.v2.ERAuthActionConfig.parse_obj(integration_action_config.data)
         return AsyncERClient(
-            service_root=f"{integration.base_url.strip('/')}/api/v1.0",
+            service_root=f"{url_parse.scheme}://{url_parse.hostname}/api/v1.0",
             username=auth_config.username,
             password=auth_config.password,
             token=auth_config.token,
