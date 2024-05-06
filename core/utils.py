@@ -6,6 +6,7 @@ import aiohttp
 import logging
 import walrus
 import backoff
+import httpx
 from uuid import UUID
 from enum import Enum
 from gundi_core import schemas as gundi_schemas
@@ -33,7 +34,7 @@ def get_redis_db():
 
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-portal = PortalApi()
+
 
 
 def read_config_from_cache_safe(cache_key, extra_dict):
@@ -95,50 +96,43 @@ async def get_outbound_config_detail(
         return config
 
     # Retrieve outbound integration details from the portal
-    logger.debug(f"Cache miss for outbound integration detail.", extra={**extra_dict})
+    logger.debug(f"Cache miss for outbound integration {outbound_id}.", extra={**extra_dict})
     connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    async with PortalApi(connect_timeout=connect_timeout, data_timeout=read_timeout) as portal:
         try:
-            response = await portal.get_outbound_integration(
-                session=s, integration_id=str(outbound_id)
+            response = await portal.get_outbound_integration(integration_id=str(outbound_id))
+        except httpx.HTTPStatusError as e:
+            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+            message = (
+                f"Failed to get config detail for outbound {outbound_id}: {error}"
             )
-        except aiohttp.ServerTimeoutError as e:
-            target_url = (
-                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
-            )
-            logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientConnectionError as e:
-            target_url = (
-                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
-            )
-            logger.error(
-                "Connection Error",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
+            target_url = str(e.request.url)
             logger.exception(
-                "Portal returned bad response during request for outbound config detail",
+                message,
                 extra={
+                    **extra_dict,
                     ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.OutboundIntId: outbound_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: e.status,
                 },
             )
-            raise ReferenceDataError(
-                f"Request for OutboundIntegration({outbound_id}) returned bad response"
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
+        except httpx.HTTPError as e:
+            error = f"HTTPError: {e}"
+            message = (
+                f"Failed to get config details for outbound {outbound_id}: {error}"
             )
+            target_url = str(e.request.url)
+            logger.exception(
+                message,
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.Url: target_url,
+                },
+            )
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
         else:
             try:
                 config = gundi_schemas.OutboundConfiguration.parse_obj(response)
@@ -183,51 +177,44 @@ async def get_inbound_integration_detail(
         )
         return config
 
-    logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
+    logger.debug(f"Cache miss for inbound integration {integration_id}", extra={**extra_dict})
 
     connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    async with PortalApi(connect_timeout=connect_timeout, data_timeout=read_timeout) as portal:
         try:
-            response = await portal.get_inbound_integration(
-                session=s, integration_id=str(integration_id)
+            response = await portal.get_inbound_integration(integration_id=str(integration_id))
+        except httpx.HTTPStatusError as e:
+            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+            message = (
+                f"Failed to get config details for inbound {integration_id}: {error}"
             )
-        except aiohttp.ServerTimeoutError as e:
-            target_url = (
-                f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
-            )
-            logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientConnectionError as e:
-            target_url = (
-                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
-            )
-            logger.error(
-                "Connection Error",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
+            target_url = str(e.request.url)
             logger.exception(
-                "Portal returned bad response during request for inbound config detail",
+                message,
                 extra={
+                    **extra_dict,
                     ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.InboundIntId: integration_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: e.status,
                 },
             )
-            raise ReferenceDataError(
-                f"Request for InboundIntegration({integration_id})"
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
+        except httpx.HTTPError as e:
+            error = f"HTTPError: {e}"
+            message = (
+                f"Failed to get config details for inbound {integration_id}: {error}"
             )
+            target_url = str(e.request.url)
+            logger.exception(
+                message,
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.Url: target_url,
+                },
+            )
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
         else:
             try:
                 config = gundi_schemas.IntegrationInformation.parse_obj(response)
