@@ -46,7 +46,7 @@ class ERDispatcher(Dispatcher, ABC):
             url_parse.scheme = "https"
 
         return AsyncERClient(
-            service_root=f"{url_parse.scheme}://{url_parse.hostname}",
+            service_root=f"{url_parse.scheme}://{url_parse.hostname}/api/v1.0",
             username=config.login,
             password=config.password,
             token=config.token,
