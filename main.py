@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Wrapper to be able to run the async function
 @cloud_event
 def main(event):
-    print(f"Event received:\n{event}")
+    print(f"CloudEvent received:\n{event}")
     asyncio.run(process_event(event))
-    print(f"Event processed successfully.")
+    print(f"CloudEvent processed successfully.")
     return {}

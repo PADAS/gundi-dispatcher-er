@@ -127,7 +127,7 @@ grpcio-status==1.56.0
     # via
     #   google-api-core
     #   google-cloud-pubsub
-gundi-client==1.0.1
+gundi-client==1.0.2
     # via
     #   -r requirements.in
     #   cdip-connector

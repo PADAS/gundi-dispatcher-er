@@ -1,5 +1,6 @@
 import datetime
 import aiohttp
+import httpx
 import pytest
 import asyncio
 from aiohttp.client_reqrep import ConnectionKey
@@ -73,11 +74,19 @@ def mock_gundi_client(
         outbound_integration_config_list
     )
     mock_client.ensure_device.return_value = async_return(device)
+    mock_client.__aenter__.return_value = mock_client
     return mock_client
 
 
 @pytest.fixture
-def mock_gundi_client_with_client_connector_error(
+def mock_gundi_client_class(mocker, mock_gundi_client):
+    mock_gundi_client_class = mocker.MagicMock()
+    mock_gundi_client_class.return_value = mock_gundi_client
+    return mock_gundi_client_class
+
+
+@pytest.fixture
+def mock_gundi_client_with_client_connect_error(
         mocker,
         inbound_integration_config,
         outbound_integration_config,
@@ -86,24 +95,47 @@ def mock_gundi_client_with_client_connector_error(
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
-    client_connector_error = aiohttp.ClientConnectorError(
-        connection_key=ConnectionKey(
-            host="cdip-portal.pamdas.org",
-            port=443,
-            is_ssl=True,
-            ssl=True,
-            proxy=None,
-            proxy_auth=None,
-            proxy_headers_hash=None
-        ),
-        os_error=ConnectionError()
-    )
+    client_connector_error = httpx.ConnectError("Connection error")
     # Side effects to raise an exception when a method is called
     mock_client.get_inbound_integration.side_effect = client_connector_error
     mock_client.get_outbound_integration.side_effect = client_connector_error
     mock_client.get_outbound_integration_list.side_effect = client_connector_error
     mock_client.ensure_device.side_effect = client_connector_error
     return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_class_with_client_connect_error(mocker, mock_gundi_client_with_client_connect_error):
+    mock_gundi_client_class_with_error = mocker.MagicMock()
+    mock_gundi_client_class_with_error.return_value = mock_gundi_client_with_client_connect_error
+    return mock_gundi_client_class_with_error
+
+
+# ToDo: parametrize with different status codes?
+@pytest.fixture
+def mock_gundi_client_with_500_error(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a connection error
+    client_connector_error = httpx.Response(status_code=500, text="Internal Server Error")
+    # Side effects to raise an exception when a method is called
+    mock_client.get_inbound_integration.side_effect = client_connector_error
+    mock_client.get_outbound_integration.side_effect = client_connector_error
+    mock_client.get_outbound_integration_list.side_effect = client_connector_error
+    mock_client.ensure_device.side_effect = client_connector_error
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_class_with_with_500_error(mocker, mock_gundi_client_with_500_error):
+    mock_gundi_client_class_with_error = mocker.MagicMock()
+    mock_gundi_client_class_with_error.return_value = mock_gundi_client_with_500_error
+    return mock_gundi_client_class_with_error
 
 
 @pytest.fixture
