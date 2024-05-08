@@ -479,6 +479,7 @@ async def process_event(event):
         # Handle retries
         if is_event_too_old(event):
             logger.warning(f"Event is too old (timestamp = {event._attributes.get('time')}) and will be sent to dead-letter.")
+            current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             return  # Skip the event
         # Process the event according to the gundi version
