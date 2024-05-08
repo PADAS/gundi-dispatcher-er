@@ -9,7 +9,6 @@ from core.errors import ReferenceDataError
     ("position_as_cloud_event", True),
     ("position_as_cloud_event_with_future_timestamp", True),
     ("position_as_cloud_event_with_old_timestamp", False)
-    #pytest.param("position_as_cloud_event_with_old_timestamp", False, marks=pytest.mark.xfail),
 ])
 async def test_process_position_successfully(
     request,
