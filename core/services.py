@@ -461,7 +461,11 @@ def is_event_too_old(event):
     except ValueError:
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
     event_time = event_time.replace(tzinfo=timezone.utc)
-    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
+    current_time = datetime.now(timezone.utc)
+    # Safety check. We have seen cloud events with future timestamps
+    if current_time < event_time:
+        return False
+    event_age_seconds = (current_time - event_time).seconds
     # Ignore events that are too old
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
