@@ -461,7 +461,9 @@ def is_event_too_old(event):
     except ValueError:
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
     event_time = event_time.replace(tzinfo=timezone.utc)
-    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
+    current_time = datetime.now(timezone.utc)
+    # Notice: We have seen cloud events with future timestamps. Don't use .seconds
+    event_age_seconds = (current_time - event_time).total_seconds()
     # Ignore events that are too old
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
@@ -476,6 +478,8 @@ async def process_event(event):
     ) as current_span:
         # Handle retries
         if is_event_too_old(event):
+            logger.warning(f"Event is too old (timestamp = {event._attributes.get('time')}) and will be sent to dead-letter.")
+            current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             return  # Skip the event
         # Process the event according to the gundi version

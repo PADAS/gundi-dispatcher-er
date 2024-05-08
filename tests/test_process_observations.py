@@ -5,15 +5,23 @@ from core.errors import ReferenceDataError
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("position,expected", [
+    ("position_as_cloud_event", True),
+    ("position_as_cloud_event_with_future_timestamp", True),
+    ("position_as_cloud_event_with_old_timestamp", False)
+])
 async def test_process_position_successfully(
+    request,
+    expected,
     mocker,
     mock_cache,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
-    position_as_cloud_event,
+    position,
     outbound_configuration_gcp_pubsub,
 ):
+    position = request.getfixturevalue(position)
     # Override the mocked config to one that uses pubsub broker
     mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
         [outbound_configuration_gcp_pubsub]
@@ -21,9 +29,9 @@ async def test_process_position_successfully(
     mocker.patch("core.utils._cache_db", mock_cache)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
-    await process_event(position_as_cloud_event)
-    assert mock_erclient_class.called
-    assert mock_erclient_class.return_value.post_sensor_observation.called
+    await process_event(position)
+    assert mock_erclient_class.called == expected
+    assert mock_erclient_class.return_value.post_sensor_observation.called == expected
 
 
 @pytest.mark.asyncio

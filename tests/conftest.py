@@ -453,6 +453,63 @@ def position_as_cloud_event():
 
 
 @pytest.fixture
+def position_as_cloud_event_with_future_timestamp():
+    future_datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    future_timestamp = future_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0',
+            'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
+            'time': future_timestamp
+        },
+        data={
+            "message": {
+                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+                "attributes": {
+                    "observation_type": "ps",
+                    "device_id": "018910980",
+                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                    "tracing_context": "{}"
+                }
+            },
+            "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+        }
+    )
+
+
+
+@pytest.fixture
+def position_as_cloud_event_with_old_timestamp():
+    old_datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=25)
+    old_timestamp = old_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0',
+            'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
+            'time': old_timestamp
+        },
+        data={
+            "message": {
+                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+                "attributes": {
+                    "observation_type": "ps",
+                    "device_id": "018910980",
+                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                    "tracing_context": "{}"
+                }
+            },
+            "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+        }
+    )
+
+
+@pytest.fixture
 def geoevent_as_cloud_event():
     return CloudEvent(
         attributes={
