@@ -178,3 +178,25 @@ async def test_process_cameratrap_event_with_faulty_cache_successfully(
     await process_event(cameratrap_event_as_cloud_event)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.post_camera_trap_report.called
+
+
+@pytest.mark.asyncio
+async def test_process_cloudevent_with_future_timestamp_successfully(
+    mocker,
+    mock_cache,
+    mock_gundi_client_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+    position_as_cloud_event_with_future_timestamp,
+    outbound_configuration_gcp_pubsub,
+):
+    # Override the mocked config to one that uses pubsub broker
+    mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
+        [outbound_configuration_gcp_pubsub]
+    )
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    await process_event(position_as_cloud_event_with_future_timestamp)
+    assert mock_erclient_class.called
+    assert mock_erclient_class.return_value.post_sensor_observation.called
