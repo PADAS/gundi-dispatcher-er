@@ -132,9 +132,36 @@ def mock_gundi_client_with_500_error(
 
 
 @pytest.fixture
+def mock_gundi_client_with_internal_exception(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate an unhandled exception
+    internal_exception = Exception("The gundi client has a bug!")
+    # Side effects to raise an exception when a method is called
+    mock_client.get_inbound_integration.side_effect = internal_exception
+    mock_client.get_outbound_integration.side_effect = internal_exception
+    mock_client.get_outbound_integration_list.side_effect = internal_exception
+    mock_client.ensure_device.side_effect = internal_exception
+    return mock_client
+
+
+
+@pytest.fixture
 def mock_gundi_client_class_with_with_500_error(mocker, mock_gundi_client_with_500_error):
     mock_gundi_client_class_with_error = mocker.MagicMock()
     mock_gundi_client_class_with_error.return_value = mock_gundi_client_with_500_error
+    return mock_gundi_client_class_with_error
+
+
+@pytest.fixture
+def mock_gundi_client_class_with_internal_exception(mocker, mock_gundi_client_with_internal_exception):
+    mock_gundi_client_class_with_error = mocker.MagicMock()
+    mock_gundi_client_class_with_error.return_value = mock_gundi_client_with_internal_exception
     return mock_gundi_client_class_with_error
 
 
@@ -227,6 +254,8 @@ def mock_erclient_class_with_service_unavailable_error(
     erclient_mock.__aexit__.return_value = er_client_close_response
     mocked_erclient_class.return_value = erclient_mock
     return mocked_erclient_class
+
+
 
 
 @pytest.fixture
@@ -569,9 +598,26 @@ def mock_gundi_client_v2(
 
 
 @pytest.fixture
+def mock_gundi_client_v2_with_internal_exception(mocker):
+    mock_client = mocker.MagicMock()
+    internal_exception = Exception("The gundi client has a bug!")
+    # Side effects to raise an exception when a method is called
+    mock_client.get_integration_details.side_effect = internal_exception
+    mock_client.__aenter__.return_value = mock_client
+    return mock_client
+
+
+@pytest.fixture
 def mock_gundi_client_v2_class(mocker, mock_gundi_client_v2):
     mock_gundi_client_v2_class = mocker.MagicMock()
     mock_gundi_client_v2_class.return_value = mock_gundi_client_v2
+    return mock_gundi_client_v2_class
+
+
+@pytest.fixture
+def mock_gundi_client_v2_class_with_internal_exception(mocker, mock_gundi_client_v2_with_internal_exception):
+    mock_gundi_client_v2_class = mocker.MagicMock()
+    mock_gundi_client_v2_class.return_value = mock_gundi_client_v2_with_internal_exception
     return mock_gundi_client_v2_class
 
 

@@ -200,3 +200,22 @@ async def test_process_observation_v2_with_custom_provider_key(
     # Check that the trace was written to redis db
     assert mock_cache.setex.called
 
+
+@pytest.mark.asyncio
+async def test_raise_exception_on_internal_exception(
+        mocker,
+        mock_cache,
+        mock_erclient_class,
+        mock_pubsub_client,
+        mock_gundi_client_v2_with_internal_exception,
+        event_v2_as_cloud_event,
+):
+    # Mock external dependencies
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_with_internal_exception)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+
+    # Check that the dispatcher raises an exception so the message is retried later
+    with pytest.raises(Exception):
+        await process_event(event_v2_as_cloud_event)
