@@ -120,6 +120,24 @@ async def test_raise_exception_on_portal_500_error(
 
 
 @pytest.mark.asyncio
+async def test_raise_exception_on_internal_exception(
+    mocker,
+    mock_cache,
+    mock_gundi_client_class_with_internal_exception,
+    mock_erclient_class,
+    mock_pubsub_client,
+    position_as_cloud_event,
+    outbound_configuration_gcp_pubsub,
+):
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_internal_exception)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    # Check that unhandled exceptions are raised so GCP can retry
+    with pytest.raises(Exception) as e_info:
+        await process_event(position_as_cloud_event)
+
+
+@pytest.mark.asyncio
 async def test_process_position_with_faulty_cache_successfully(
     mocker,
     mock_cache_with_connection_error,

@@ -304,38 +304,46 @@ async def process_transformed_observation(transformed_observation, attributes):
                     name="er_dispatcher.observation_dispatched_successfully"
                 )
         except (DispatcherException, ReferenceDataError) as e:
-            logger.exception(
-                f"External error occurred processing transformed observation",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                },
-            )
-            # Raise the exception so the function execution is marked as failed and retried later
-            raise e
+            with tracing.tracer.start_as_current_span(
+                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
+            ) as error_span:
+                error_msg = f"External error occurred processing transformed observation: {e}"
+                logger.exception(
+                    error_msg,
+                    extra={
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeviceId: device_id,
+                        ExtraKeys.InboundIntId: integration_id,
+                        ExtraKeys.OutboundIntId: outbound_config_id,
+                        ExtraKeys.StreamType: observation_type,
+                    },
+                )
+                error_span.set_attribute("error", error_msg)
+                # Raise the exception so the message is retried later by GCP
+                raise e
 
         except Exception as e:
-            error_msg = (
-                f"Unexpected internal error occurred processing transformed observation: {e}"
-            )
-            logger.exception(
-                error_msg,
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                },
-            )
-            # Unexpected internal errors will be redirected straight to deadletter
-            current_span.set_attribute("error", error_msg)
-            # Send it to a dead letter pub/sub topic
-            await send_observation_to_dead_letter_topic(transformed_observation, attributes)
+            # Log and raise so it's retried
+            with tracing.tracer.start_as_current_span(
+                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
+            ) as error_span:
+                error_msg = (
+                    f"Unexpected internal error occurred processing transformed observation: {e}"
+                )
+                logger.exception(
+                    error_msg,
+                    extra={
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeadLetter: True,
+                        ExtraKeys.DeviceId: device_id,
+                        ExtraKeys.InboundIntId: integration_id,
+                        ExtraKeys.OutboundIntId: outbound_config_id,
+                        ExtraKeys.StreamType: observation_type,
+                    },
+                )
+                error_span.set_attribute("error", error_msg)
+                # Raise the exception so the message is retried later by GCP
+                raise e
 
 
 async def process_transformed_observation_v2(transformed_observation, attributes):
@@ -381,7 +389,7 @@ async def process_transformed_observation_v2(transformed_observation, attributes
             )
         except Exception as e:
             logger.exception(
-                f"Exception occurred prior to dispatching transformed observation",
+                f"Exception occurred prior to dispatching transformed observation: {e}",
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.Observation: transformed_observation,
@@ -417,38 +425,49 @@ async def process_transformed_observation_v2(transformed_observation, attributes
                     name="er_dispatcher.observation_dispatched_successfully"
                 )
         except (DispatcherException, ReferenceDataError) as e:
-            logger.exception(
-                f"External error occurred processing transformed observation",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeviceId: source_id,
-                    ExtraKeys.InboundIntId: data_provider_id,
-                    ExtraKeys.OutboundIntId: destination_id,
-                    ExtraKeys.StreamType: stream_type,
-                },
-            )
-            # Raise the exception so the function execution is marked as failed and retried later
-            raise e
+            # Log and raise so it's retried
+            with tracing.tracer.start_as_current_span(
+                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
+            ) as error_span:
+                error_msg = (
+                    f"External error occurred processing transformed observation: {e}"
+                )
+                logger.exception(
+                    error_msg,
+                    extra={
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeviceId: source_id,
+                        ExtraKeys.InboundIntId: data_provider_id,
+                        ExtraKeys.OutboundIntId: destination_id,
+                        ExtraKeys.StreamType: stream_type,
+                    },
+                )
+                error_span.set_attribute("error", error_msg)
+                # Raise the exception so the message is retried later by GCP
+                raise e
 
         except Exception as e:
-            error_msg = (
-                f"Unexpected internal error occurred processing transformed observation: {e}"
-            )
-            logger.exception(
-                error_msg,
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
-                    ExtraKeys.DeviceId: source_id,
-                    ExtraKeys.InboundIntId: data_provider_id,
-                    ExtraKeys.OutboundIntId: destination_id,
-                    ExtraKeys.StreamType: stream_type,
-                },
-            )
-            # Unexpected internal errors will be redirected straight to deadletter
-            current_span.set_attribute("error", error_msg)
-            # Send it to a dead letter pub/sub topic
-            await send_observation_to_dead_letter_topic(transformed_observation, attributes)
+            # Log and raise so it's retried
+            with tracing.tracer.start_as_current_span(
+                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
+            ) as error_span:
+                error_msg = (
+                    f"Unexpected internal error occurred processing transformed observation: {e}"
+                )
+                logger.exception(
+                    error_msg,
+                    extra={
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeadLetter: True,
+                        ExtraKeys.DeviceId: source_id,
+                        ExtraKeys.InboundIntId: data_provider_id,
+                        ExtraKeys.OutboundIntId: destination_id,
+                        ExtraKeys.StreamType: stream_type,
+                    },
+                )
+                error_span.set_attribute("error", error_msg)
+                # Raise the exception so the message is retried later by GCP
+                raise e
 
 
 def is_event_too_old(event):
