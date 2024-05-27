@@ -12,7 +12,7 @@ jobs:
     outputs:
       file_name: ${{ steps.vars.outputs.file_name }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - id: vars
         run: |
           echo "file_name=er-dispatcher-src-${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
