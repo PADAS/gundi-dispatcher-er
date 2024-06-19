@@ -45,6 +45,10 @@ class ERDispatcher(Dispatcher, ABC):
         if url_parse.scheme == "http":
             url_parse.scheme = "https"
 
+        # Remove any path if present
+        if url_parse.path:
+            url_parse.path = ""
+
         return AsyncERClient(
             service_root=f"{url_parse.scheme}://{url_parse.hostname}/api/v1.0",
             username=config.login,
@@ -164,6 +168,11 @@ class ERDispatcherV2(DispatcherV2, ABC):
         # Check for https
         if url_parse.scheme == "http":
             url_parse.scheme = "https"
+
+        # Remove any path if present
+        if url_parse.path:
+            url_parse.path = ""
+
         # Look for the configuration of the authentication action
         configurations = integration.configurations
         integration_action_config = find_config_for_action(
