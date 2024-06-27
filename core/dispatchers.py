@@ -39,7 +39,8 @@ class ERDispatcher(Dispatcher, ABC):
         config: schemas.OutboundConfiguration, provider: str
     ) -> AsyncERClient:
         provider_key = provider
-        url_parse = urlparse(config.endpoint)
+        url_parse = urlparse(config.endpoint, "https")
+        netloc = url_parse.netloc or url_parse.path
 
         # Check for https
         scheme = url_parse.scheme
@@ -47,7 +48,7 @@ class ERDispatcher(Dispatcher, ABC):
             scheme = "https"
 
         return AsyncERClient(
-            service_root=f"{scheme}://{url_parse.hostname}/api/v1.0",
+            service_root=f"{scheme}://{netloc}/api/v1.0",
             username=config.login,
             password=config.password,
             token=config.token,
@@ -161,7 +162,9 @@ class ERDispatcherV2(DispatcherV2, ABC):
         provider: str
     ) -> AsyncERClient:
         provider_key = provider
-        url_parse = urlparse(integration.base_url)
+        url_parse = urlparse(integration.base_url, "https")
+        netloc = url_parse.netloc or url_parse.path
+
         # Check for https
         scheme = url_parse.scheme
         if scheme == "http":
@@ -179,7 +182,7 @@ class ERDispatcherV2(DispatcherV2, ABC):
             )
         auth_config = schemas.v2.ERAuthActionConfig.parse_obj(integration_action_config.data)
         return AsyncERClient(
-            service_root=f"{scheme}://{url_parse.hostname}/api/v1.0",
+            service_root=f"{scheme}://{netloc}/api/v1.0",
             username=auth_config.username,
             password=auth_config.password,
             token=auth_config.token,
