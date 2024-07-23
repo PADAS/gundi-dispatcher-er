@@ -10,17 +10,11 @@ from core.utils import (
     get_inbound_integration_detail,
     get_outbound_config_detail,
     ExtraKeys,
-    get_integration_details,
-    get_dispatched_observation,
-    cache_dispatched_observation,
-    is_null,
-    publish_event,
 )
-from gundi_core.schemas import v2 as gundi_schemas_v2
-from gundi_core import events as system_events
 from .errors import DispatcherException, ReferenceDataError
 from . import tracing
 from . import settings
+from .event_handlers import event_handlers, event_schemas
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +32,7 @@ async def dispatch_transformed_observation(
 
     if not outbound_config_id or not inbound_int_id:
         logger.error(
-            "dispatch_transformed_observation - value error.",
+            f"Missing outbound config or inbound integration id",
             extra=extra_dict,
         )
 
@@ -82,115 +76,6 @@ async def dispatch_transformed_observation(
                 },
             )
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
-
-
-async def dispatch_transformed_observation_v2(
-    observation, stream_type: str, data_provider_id:str, provider_key: str, destination_id: str,
-    gundi_id: str, related_to=None
-):
-    extra_dict = {
-        ExtraKeys.OutboundIntId: destination_id,
-        ExtraKeys.Provider: provider_key,
-        ExtraKeys.Observation: observation,
-        ExtraKeys.StreamType: stream_type,
-        ExtraKeys.GundiId: gundi_id,
-        ExtraKeys.RelatedTo: related_to
-    }
-
-    if not destination_id or not provider_key:
-        logger.error(
-            "dispatch_transformed_observation - value error.",
-            extra=extra_dict,
-        )
-
-    # Get details about the destination
-    destination_integration = await get_integration_details(integration_id=destination_id)
-    if not destination_integration:
-        logger.error(
-            f"No destination config details found",
-            extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
-        )
-        raise ReferenceDataError
-
-    # # Get details about the data provider ?
-    # provider_integration = await get_integration_details(integration_id=data_provider_id)
-    # # Look for the configuration of the push action
-    # configurations = provider_integration.configurations
-
-    # Check for related observations
-    if not is_null(related_to):
-        # Check if the related object was dispatched
-        related_observation = await get_dispatched_observation(gundi_id=related_to, destination_id=destination_id)
-        if not related_observation:
-            logger.error(
-                f"Error getting related observation. Will retry later.",
-                extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
-            )
-            raise ReferenceDataError
-    else:
-        related_observation = None
-    try:  # Select the dispatcher
-        dispatcher_cls = dispatchers.dispatcher_cls_by_type[stream_type]
-    except KeyError as e:
-        logger.error(
-            f"No dispatcher found",
-            extra={
-                **extra_dict,
-                ExtraKeys.AttentionNeeded: True,
-            }
-        )
-        raise Exception("No dispatcher found")
-    else:  # Send the observation to the destination
-        try:
-            dispatcher = dispatcher_cls(
-                integration=destination_integration,
-                provider=provider_key
-            )
-            result = await dispatcher.send(observation, related_observation=related_observation)
-        except Exception as e:
-            logger.error(
-                f"Exception occurred dispatching observation",
-                extra={
-                    **extra_dict,
-                    ExtraKeys.Provider: provider_key,
-                    ExtraKeys.AttentionNeeded: True,
-                },
-            )
-            # Emit events for the portal and other interested services (EDA)
-            await publish_event(
-                event=system_events.ObservationDeliveryFailed(
-                    payload=gundi_schemas_v2.DispatchedObservation(
-                        gundi_id=gundi_id,
-                        related_to=related_to,
-                        external_id=None,  # ID returned by the destination system
-                        data_provider_id=data_provider_id,
-                        destination_id=destination_id,
-                        delivered_at=datetime.now(timezone.utc)  # UTC
-                    )
-                ),
-                topic_name=settings.DISPATCHER_EVENTS_TOPIC
-            )
-            raise DispatcherException(f"Exception occurred dispatching observation: {e}")
-        else:
-            # Cache data related to the dispatched observation
-            if isinstance(result, list):
-                result = result[0]
-            dispatched_observation = gundi_schemas_v2.DispatchedObservation(
-                gundi_id=gundi_id,
-                related_to=related_to,
-                external_id=result.get("id"),  # ID returned by the destination system
-                data_provider_id=data_provider_id,
-                destination_id=destination_id,
-                delivered_at=datetime.now(timezone.utc)  # UTC
-            )
-            cache_dispatched_observation(observation=dispatched_observation)
-            # Emit events for the portal and other interested services (EDA)
-            await publish_event(
-                event=system_events.ObservationDelivered(
-                    payload=dispatched_observation
-                ),
-                topic_name=settings.DISPATCHER_EVENTS_TOPIC
-            )
 
 
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
@@ -346,128 +231,33 @@ async def process_transformed_observation(transformed_observation, attributes):
                 raise e
 
 
-async def process_transformed_observation_v2(transformed_observation, attributes):
-    stream_type = attributes.get("stream_type")
-    if stream_type not in dispatchers.dispatcher_cls_by_type.keys():
-        error_msg = f"Stream type `{stream_type}` is not supported by this dispatcher."
-        logger.error(
-            error_msg,
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-            },
-        )
-        raise DispatcherException(f"Exception occurred dispatching observation: {error_msg}")
-
+async def process_transformer_event_v2(raw_event, attributes):
     with tracing.tracer.start_as_current_span(
-            "er_dispatcher.process_transformed_observation", kind=SpanKind.CLIENT
+            "er_dispatcher.process_transformer_event_v2", kind=SpanKind.CLIENT
     ) as current_span:
         current_span.add_event(
             name="er_dispatcher.transformed_observation_received_at_dispatcher"
         )
-        current_span.set_attribute("transformed_message", str(transformed_observation))
+        current_span.set_attribute("transformed_message", str(raw_event))
         current_span.set_attribute("environment", settings.TRACE_ENVIRONMENT)
         current_span.set_attribute("service", "er-dispatcher")
+        logger.debug(f"Message received: \npayload: {raw_event} \nattributes: {attributes}")
+        if schema_version := raw_event.get("schema_version") != "v1":
+            logger.warning(f"Schema version '{schema_version}' not supported. Message discarded.")
+            return
+        event_type = raw_event.get("event_type")
         try:
-            source_id = attributes.get("external_source_id")
-            data_provider_id = attributes.get("data_provider_id")
-            provider_key = transformed_observation.pop("provider_key", attributes.get("provider_key"))
-            destination_id = attributes.get("destination_id")
-            gundi_id = attributes.get("gundi_id")
-            related_to = attributes.get("related_to")
-            logger.debug(f"transformed_observation: {transformed_observation}")
-            logger.info(
-                "received transformed observation",
-                extra={
-                    ExtraKeys.DeviceId: source_id,
-                    ExtraKeys.InboundIntId: data_provider_id,
-                    ExtraKeys.Provider: provider_key,
-                    ExtraKeys.OutboundIntId: destination_id,
-                    ExtraKeys.StreamType: stream_type,
-                    ExtraKeys.GundiId: gundi_id,
-                    ExtraKeys.RelatedTo: related_to
-                },
-            )
-        except Exception as e:
-            logger.exception(
-                f"Exception occurred prior to dispatching transformed observation: {e}",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Observation: transformed_observation,
-                },
-            )
-            raise e
+            handler = event_handlers[event_type]
+        except KeyError:
+            logger.warning(f"Event of type '{event_type}' unknown. Ignored.")
+            return
         try:
-            logger.info(
-                "Dispatching for transformed observation.",
-                extra={
-                    ExtraKeys.InboundIntId: data_provider_id,
-                    ExtraKeys.OutboundIntId: destination_id,
-                    ExtraKeys.StreamType: stream_type,
-                    ExtraKeys.GundiId: gundi_id,
-                    ExtraKeys.RelatedTo: related_to
-                },
-            )
-            with tracing.tracer.start_as_current_span(
-                "er_dispatcher.dispatch_transformed_observation", kind=SpanKind.CLIENT
-            ) as current_span:
-                await dispatch_transformed_observation_v2(
-                    observation=transformed_observation,
-                    stream_type=stream_type,
-                    data_provider_id=data_provider_id,
-                    provider_key=provider_key,
-                    destination_id=destination_id,
-                    gundi_id=gundi_id,
-                    related_to=related_to
-                )
-                current_span.set_attribute("is_dispatched_successfully", True)
-                current_span.set_attribute("destination_id", str(destination_id))
-                current_span.add_event(
-                    name="er_dispatcher.observation_dispatched_successfully"
-                )
-        except (DispatcherException, ReferenceDataError) as e:
-            # Log and raise so it's retried
-            with tracing.tracer.start_as_current_span(
-                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
-            ) as error_span:
-                error_msg = (
-                    f"External error occurred processing transformed observation: {e}"
-                )
-                logger.exception(
-                    error_msg,
-                    extra={
-                        ExtraKeys.AttentionNeeded: True,
-                        ExtraKeys.DeviceId: source_id,
-                        ExtraKeys.InboundIntId: data_provider_id,
-                        ExtraKeys.OutboundIntId: destination_id,
-                        ExtraKeys.StreamType: stream_type,
-                    },
-                )
-                error_span.set_attribute("error", error_msg)
-                # Raise the exception so the message is retried later by GCP
-                raise e
-
-        except Exception as e:
-            # Log and raise so it's retried
-            with tracing.tracer.start_as_current_span(
-                    "er_dispatcher.error_dispatching_observation", kind=SpanKind.CLIENT
-            ) as error_span:
-                error_msg = (
-                    f"Unexpected internal error occurred processing transformed observation: {e}"
-                )
-                logger.exception(
-                    error_msg,
-                    extra={
-                        ExtraKeys.AttentionNeeded: True,
-                        ExtraKeys.DeadLetter: True,
-                        ExtraKeys.DeviceId: source_id,
-                        ExtraKeys.InboundIntId: data_provider_id,
-                        ExtraKeys.OutboundIntId: destination_id,
-                        ExtraKeys.StreamType: stream_type,
-                    },
-                )
-                error_span.set_attribute("error", error_msg)
-                # Raise the exception so the message is retried later by GCP
-                raise e
+            schema = event_schemas[event_type]
+        except KeyError:
+            logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
+            return {}
+        parsed_event = schema.parse_obj(raw_event)
+        return await handler(event=parsed_event, attributes=attributes)
 
 
 def is_event_too_old(event):
@@ -503,6 +293,6 @@ async def process_event(event):
             return  # Skip the event
         # Process the event according to the gundi version
         if attributes.get("gundi_version", "v1") == "v2":
-            await process_transformed_observation_v2(transformed_observation, attributes)
+            await process_transformer_event_v2(transformed_observation, attributes)
         else:  # Default to v1
             await process_transformed_observation(transformed_observation, attributes)
