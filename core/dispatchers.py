@@ -214,6 +214,19 @@ class EREventDispatcher(ERDispatcherV2):
                 raise ex
 
 
+class EREventUpdateDispatcher(ERDispatcherV2):
+
+    async def send(self, event_update: schemas.v2.EREventUpdate, **kwargs):
+        async with self.er_client as client:
+            try:
+                return await client.patch_event(
+                    data=event_update.changes
+                )
+            except Exception as ex:
+                logger.exception(f"Error patching event: {ex}")
+                raise ex
+
+
 class EREventAttachmentDispatcher(ERDispatcherV2):
     def __init__(
             self,
@@ -264,6 +277,7 @@ dispatcher_cls_by_type = {
     schemas.StreamPrefixEnum.camera_trap: ERCameraTrapDispatcher,
     # Gundi v2
     schemas.v2.StreamPrefixEnum.event: EREventDispatcher,
+    schemas.v2.StreamPrefixEnum.event_update: EREventUpdateDispatcher,
     schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher,
     schemas.v2.StreamPrefixEnum.observation: ERObservationDispatcher
 }
