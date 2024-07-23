@@ -1,4 +1,5 @@
 # ToDo: Move base classes or utils into the SDK
+import json
 import logging
 from abc import ABC, abstractmethod
 from erclient import AsyncERClient
@@ -136,7 +137,7 @@ class DispatcherV2(ABC):
         self.integration = integration
 
     @abstractmethod
-    async def send(self, messages: list, **kwargs):
+    async def send(self, data, **kwargs):
         ...
 
 
@@ -201,19 +202,16 @@ class ERDispatcherV2(DispatcherV2, ABC):
 
 class EREventDispatcher(ERDispatcherV2):
 
-    async def send(self, messages: Union[list, dict], **kwargs):
-        results = []
-        if isinstance(messages, dict):
-            messages = [messages]
-
+    async def send(self, event: schemas.v2.EREvent, **kwargs):
         async with self.er_client as client:
-            for m in messages:
-                try:
-                    results.append(await client.post_report(m))
-                except Exception as ex:
-                    logger.exception(f"exception raised sending to dest {ex}")
-                    raise ex
-        return results
+            try:
+                event_cleaned = json.loads(event.json(exclude_none=True, exclude_unset=True))
+                return await client.post_report(
+                    data=event_cleaned
+                )
+            except Exception as ex:
+                logger.exception(f"Exception raised sending to dest {ex}")
+                raise ex
 
 
 class EREventAttachmentDispatcher(ERDispatcherV2):
@@ -225,14 +223,14 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
         super().__init__(integration=integration, **kwargs)
         self.cloud_storage = get_cloud_storage()
 
-    async def send(self, attachment_payload: dict, **kwargs):
+    async def send(self, attachment_payload: schemas.v2.ERAttachment, **kwargs):
         result = None
         related_observation = kwargs.get("related_observation")
         if not related_observation:
             raise ValueError("related_observation is required")
         try:
             external_event_id = related_observation.external_id
-            file_path = attachment_payload.get("file_path")
+            file_path = attachment_payload.file_path
             file = self.cloud_storage.download(file_path)
             result = await self.er_client.post_report_attachment(
                 report_id=external_event_id, file=file
@@ -249,20 +247,14 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
 
 class ERObservationDispatcher(ERDispatcherV2):
 
-    async def send(self, messages: Union[list, dict], **kwargs):
-        results = []
-        if isinstance(messages, dict):
-            messages = [messages]
-
+    async def send(self, observation: schemas.v2.ERObservation, **kwargs):
         async with self.er_client as client:
-            for m in messages:
-                try:
-                    results.append(await client.post_sensor_observation(m))
-                except Exception as ex:
-                    logger.exception(f"exception raised sending to dest {ex}")
-                    raise ex
-        return results
-
+            try:
+                observation_cleaned = json.loads(observation.json(exclude_none=True, exclude_unset=True))
+                return await client.post_sensor_observation(observation_cleaned)
+            except Exception as ex:
+                logger.exception(f"exception raised sending to dest {ex}")
+                raise ex
 
 
 dispatcher_cls_by_type = {
