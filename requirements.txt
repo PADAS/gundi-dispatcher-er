@@ -60,7 +60,7 @@ deprecated==1.2.14
     # via opentelemetry-api
 deprecation==2.1.0
     # via cloudevents
-earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.2.0-alpha/earthranger_client-1.2.0-py3-none-any.whl
+earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.3.0/earthranger_client-1.3.0-py3-none-any.whl
     # via -r requirements.in
 environs==9.5.0
     # via
@@ -131,9 +131,9 @@ gundi-client==1.0.2
     # via
     #   -r requirements.in
     #   cdip-connector
-gundi-client-v2==2.1.2
+gundi-client-v2==2.3.2
     # via -r requirements.in
-gundi-core==1.2.6
+gundi-core==1.5.7
     # via
     #   -r requirements.in
     #   cdip-connector
