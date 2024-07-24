@@ -219,8 +219,11 @@ class EREventUpdateDispatcher(ERDispatcherV2):
     async def send(self, event_update: schemas.v2.EREventUpdate, **kwargs):
         async with self.er_client as client:
             try:
+                er_event_id = kwargs.get("external_id")
+                if not er_event_id:
+                    raise ValueError("external_id is required")
                 return await client.patch_event(
-                    data=event_update.changes
+                    event_id=er_event_id, payload=event_update.changes
                 )
             except Exception as ex:
                 logger.exception(f"Error patching event: {ex}")

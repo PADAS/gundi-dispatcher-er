@@ -18,7 +18,7 @@ from core.utils import (
     publish_event,
 )
 from gundi_core.schemas import v2 as gundi_schemas_v2
-from gundi_core import events as system_events
+from gundi_core import events as system_events, schemas
 from opentelemetry.trace import SpanKind
 
 
@@ -83,6 +83,21 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 raise ReferenceDataError(error_msg)
         else:
             related_observation = None
+
+        # If it's an update, get the external id
+        if stream_type == schemas.v2.StreamPrefixEnum.event_update:
+            dispatched_observation = await get_dispatched_observation(gundi_id=gundi_id, destination_id=destination_id)
+            if not dispatched_observation:
+                error_msg = f"Event {gundi_id} wasn't delivered yet. Will retry later.",
+                logger.warning(
+                    error_msg,
+                    extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
+                )
+                raise ReferenceDataError(error_msg)
+            external_id = str(dispatched_observation.external_id)
+        else:
+            external_id = None
+
         try:  # Select the dispatcher
             dispatcher_cls = dispatchers.dispatcher_cls_by_type[stream_type]
         except KeyError as e:
@@ -101,7 +116,11 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                     integration=destination_integration,
                     provider=provider_key
                 )
-                result = await dispatcher.send(observation, related_observation=related_observation)
+                kwargs = {
+                    "external_id": external_id,  # Used in updates
+                    "related_observation": related_observation
+                }
+                result = await dispatcher.send(observation, **kwargs)
             except Exception as e:
                 error_msg = f"Exception occurred dispatching observation {gundi_id}: {e}"
                 logger.exception(
@@ -128,6 +147,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 )
                 raise DispatcherException(error_msg)
             else:
+                logger.debug(f"Response: {result}")
                 current_span.set_attribute("is_dispatched_successfully", True)
                 current_span.set_attribute("destination_id", str(destination_id))
                 current_span.add_event(
