@@ -3,41 +3,64 @@ curl localhost:8080 \
   -H "Content-Type: application/json" \
   -H "ce-id: 123451234512345" \
   -H "ce-specversion: 1.0" \
-  -H "ce-time: 2023-10-03T10:01:56.789Z" \
+  -H "ce-time: 2024-07-24T12:51:00.789Z" \
   -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
   -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
-        "data":"eyJtYW51ZmFjdHVyZXJfaWQiOiAiS1dENDU2IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiZWEyZDVmY2EtNzUyYS00YTQ0LWIxNzAtNjY4ZDc4MGRiODVlIiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTAtMDMgMTc6MzU6MDIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NDMsICJsYXQiOiAtNTEuNjg4MjI4fSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiA1fSwgInN1YmplY3Rfc3VidHlwZSI6ICJnaXJhZmZlIiwgIiI6IG51bGx9",
+        "data":"eyJldmVudF9pZCI6ICJhZTdmNjFkZi0yYjg1LTQ3MDMtOTVkYi0yYWUyNDI0YzBkZjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTQ6NTA6NTAuMDY1NjU0KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAibGlvbl9zaWdodGluZyIsICJ0aW1lIjogIjIwMjQtMDctMjQgMTQ6MTg6MTIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDEzLjc4MzA2NSwgImxhdGl0dWRlIjogMTMuNjg4NjM1fSwgImV2ZW50X2RldGFpbHMiOiB7InNwZWNpZXMiOiAiTGlvbiJ9fSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=",
         "attributes":{
           "gundi_version":"v2",
-          "provider_key":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
-          "gundi_id":"189d3730-c6de-4bb7-974e-7bc410e2f4a2",
-          "related_to": "None",
-          "stream_type":"obv",
-          "source_id":"ea2d5fca-752a-4a44-b170-668d780db85e",
-          "external_source_id":"Xyz123",
-          "destination_id":"a9aa0990-2674-4ff4-8ba2-f9b9a613d7c0",
+          "provider_key":"gundi_traptagger_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+          "gundi_id":"6cb82182-51b2-4309-ba83-c99ed8e61ae8",
+          "related_to":"None",
+          "stream_type":"ev",
+          "source_id":"ac1b9cdc-a193-4515-b446-b177bcc5f342",
+          "external_source_id":"camera123",
+          "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
           "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
           "annotations":"{}",
-          "tracing_context":"{}"
+          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
         }
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }'
-# Gundi v2 Event
+
+
+# ObservationTransformedER v2 [Ok]
 #  -d '{
 #      "message": {
-#        "data":"eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJsZW9wYXJkX3NpZ2h0aW5nIiwgImV2ZW50X2RldGFpbHMiOiB7InNpdGVfbmFtZSI6ICJDYW1lcmEyQSIsICJzcGVjaWVzIjogIkxlb3BhcmQiLCAidGFncyI6IFsiYWR1bHQiLCAibWFsZSJdLCAiYW5pbWFsX2NvdW50IjogMn0sICJ0aW1lIjogIjIwMjMtMDYtMjMgMDA6NTE6MDArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDIwLjgwNjc4NSwgImxhdGl0dWRlIjogLTU1Ljc4NDk5OH19",
+#        "data":"eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfX0sICJldmVudF90eXBlIjogIk9ic2VydmF0aW9uVHJhbnNmb3JtZWRFUiJ9",
 #        "attributes":{
 #          "gundi_version":"v2",
-#          "provider_key":"awt",
-#          "gundi_id":"23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+#          "provider_key":"gundi_traptagger_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+#          "gundi_id":"29074f3b-bf2f-43fa-8091-6943039935d1",
+#          "related_to": "None",
+#          "stream_type":"obv",
+#          "source_id":"eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+#          "external_source_id":"test-device",
+#          "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+#          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+#          "annotations":"{}",
+#          "tracing_context":"{}"
+#        }
+#      },
+#      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+#    }'
+#
+# EventTransformedER v2 [Ok]
+#  -d '{
+#      "message": {
+#        "data":"eyJldmVudF9pZCI6ICJhZTdmNjFkZi0yYjg1LTQ3MDMtOTVkYi0yYWUyNDI0YzBkZjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTQ6NTA6NTAuMDY1NjU0KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAibGlvbl9zaWdodGluZyIsICJ0aW1lIjogIjIwMjQtMDctMjQgMTQ6MTg6MTIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDEzLjc4MzA2NSwgImxhdGl0dWRlIjogMTMuNjg4NjM1fSwgImV2ZW50X2RldGFpbHMiOiB7InNwZWNpZXMiOiAiTGlvbiJ9fSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=",
+#        "attributes":{
+#          "gundi_version":"v2",
+#          "provider_key":"gundi_traptagger_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+#          "gundi_id":"6cb82182-51b2-4309-ba83-c99ed8e61ae8",
 #          "related_to":"None",
 #          "stream_type":"ev",
-#          "source_id":"ea2d5fca-752a-4a44-b170-668d780db85e",
-#          "external_source_id":"Xyz123",
-#          "destination_id":"a9aa0990-2674-4ff4-8ba2-f9b9a613d7c0",
+#          "source_id":"ac1b9cdc-a193-4515-b446-b177bcc5f342",
+#          "external_source_id":"camera123",
+#          "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
@@ -45,26 +68,47 @@ curl localhost:8080 \
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
-# Gundi v2 Attachment
+# EventUpdateTransformedER v2 [Ok]
 #  -d '{
 #      "message": {
-#        "data":"eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9",
+#        "data":"eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
 #        "attributes":{
 #          "gundi_version":"v2",
-#          "provider_key":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
-#          "gundi_id":"e6795790-4a5f-4d47-ac93-de7d7713698b",
-#          "related_to":"13632f77-6858-4721-8603-64138a9f38aa",
-#          "stream_type":"att",
-#          "source_id":"None",
-#          "external_source_id":"None",
-#          "destination_id":"a9aa0990-2674-4ff4-8ba2-f9b9a613d7c0",
+#          "provider_key":"gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+#          "gundi_id":"6cb82182-51b2-4309-ba83-c99ed8e61ae8",
+#          "related_to":"None",
+#          "stream_type":"evu",
+#          "source_id":"ac1b9cdc-a193-4515-b446-b177bcc5f342",
+#          "external_source_id":"camera123",
+#          "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
-#          "annotations":"null",
+#          "annotations":"{}",
+#          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
+#        }
+#      },
+#      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+#    }'
+# AttachmentTransformedER v2 [Ok]
+#-d '{
+#      "message": {
+#        "data":"eyJldmVudF9pZCI6ICI5NjNkYmM1Ni03ZWVhLTQ5NDktYjM0ZS1hMWMwNWRhYWNjNGUiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6Mzg6MDQuNDA0NzM5KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImZpbGVfcGF0aCI6ICJhdHRhY2htZW50cy85YmVkYzAzZS04NDE1LTQ2ZGItYWE3MC03ODI0OTBjZGZmMzFfd2lsZF9kb2ctbWFsZS5zdmcifSwgImV2ZW50X3R5cGUiOiAiQXR0YWNobWVudFRyYW5zZm9ybWVkRVIifQ==",
+#        "attributes":{
+#          "gundi_version":"v2",
+#          "provider_key":"gundi_traptagger_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+#          "gundi_id":"9bedc03e-8415-46db-aa70-782490cdff31",
+#          "related_to": "6cb82182-51b2-4309-ba83-c99ed8e61ae8",
+#          "stream_type":"att",
+#          "source_id":"eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+#          "external_source_id":"test-device",
+#          "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+#          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+#          "annotations":"{}",
 #          "tracing_context":"{}"
 #        }
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
+#
 # Gundi v1
 #  -d '{
 #        "message": {
