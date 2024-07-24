@@ -222,8 +222,8 @@ class EREventUpdateDispatcher(ERDispatcherV2):
                 er_event_id = kwargs.get("external_id")
                 if not er_event_id:
                     raise ValueError("external_id is required")
-                return await client.patch_event(
-                    event_id=er_event_id, payload=event_update.changes
+                return await client.patch_report(
+                    event_id=er_event_id, data=event_update.changes
                 )
             except Exception as ex:
                 logger.exception(f"Error patching event: {ex}")

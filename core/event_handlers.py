@@ -25,7 +25,6 @@ from opentelemetry.trace import SpanKind
 logger = logging.getLogger(__name__)
 
 
-# ToDo: refactor using pydantic models for observations
 async def dispatch_transformed_observation_v2(observation, attributes: dict):
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.dispatch_transformed_observation", kind=SpanKind.CLIENT
@@ -147,31 +146,48 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 )
                 raise DispatcherException(error_msg)
             else:
-                logger.debug(f"Response: {result}")
+                logger.debug(f"Observation {gundi_id} delivered with success. ER response: {result}")
                 current_span.set_attribute("is_dispatched_successfully", True)
                 current_span.set_attribute("destination_id", str(destination_id))
                 current_span.add_event(
                     name="er_dispatcher.observation_dispatched_successfully"
                 )
-                # Cache data related to the dispatched observation
-                if isinstance(result, list):
-                    result = result[0]
-                dispatched_observation = gundi_schemas_v2.DispatchedObservation(
-                    gundi_id=gundi_id,
-                    related_to=related_to,
-                    external_id=result.get("id"),  # ID returned by the destination system
-                    data_provider_id=data_provider_id,
-                    destination_id=destination_id,
-                    delivered_at=datetime.now(timezone.utc)  # UTC
-                )
-                cache_dispatched_observation(observation=dispatched_observation)
-                # Emit events for the portal and other interested services (EDA)
-                await publish_event(
-                    event=system_events.ObservationDelivered(
-                        payload=dispatched_observation
-                    ),
-                    topic_name=settings.DISPATCHER_EVENTS_TOPIC
-                )
+                if stream_type == schemas.v2.StreamPrefixEnum.event_update:
+                    # ToDo. Publish event for activity logs
+                    # await publish_event(
+                    #     event=system_events.EventUpdated(
+                    #         payload=gundi_schemas_v2.UpdatedEvent(
+                    #             gundi_id=gundi_id,
+                    #             related_to=related_to,
+                    #             external_id=result.get("id"),  # ID returned by the destination system
+                    #             data_provider_id=data_provider_id,
+                    #             destination_id=destination_id,
+                    #             updated_at=datetime.now(timezone.utc)  # UTC
+                    #         )
+                    #     ),
+                    #     topic_name=settings.DISPATCHER_EVENTS_TOPIC
+                    # )
+                    pass
+                else:
+                    # Cache data related to the dispatched observation
+                    if isinstance(result, list):
+                        result = result[0]
+                    dispatched_observation = gundi_schemas_v2.DispatchedObservation(
+                        gundi_id=gundi_id,
+                        related_to=related_to,
+                        external_id=result.get("id"),  # ID returned by the destination system
+                        data_provider_id=data_provider_id,
+                        destination_id=destination_id,
+                        delivered_at=datetime.now(timezone.utc)  # UTC
+                    )
+                    cache_dispatched_observation(observation=dispatched_observation)
+                    # Emit events for the portal and other interested services (EDA)
+                    await publish_event(
+                        event=system_events.ObservationDelivered(
+                            payload=dispatched_observation
+                        ),
+                        topic_name=settings.DISPATCHER_EVENTS_TOPIC
+                    )
 
 
 async def handle_er_event(event: EventTransformedER, attributes: dict):
