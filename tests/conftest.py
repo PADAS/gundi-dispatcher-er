@@ -738,7 +738,7 @@ def observation_v2_with_provider_key_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJtYW51ZmFjdHVyZXJfaWQiOiAiQ0VMMDA3IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAidGVzdC1kZXZpY2UtMDA3IiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTItMDcgMTU6MzU6MTgrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NTMsICJsYXQiOiAtNTEuNjg4MjQyfSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiAzMH0sICJzdWJqZWN0X3N1YnR5cGUiOiAiY2VsbHN0b3AtdmVoaWNsZSIsICJwcm92aWRlcl9rZXkiOiAibWFwaXBlZGlhIn0=',
+                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfSwgInByb3ZpZGVyX2tleSI6ICJtYXBpcGVkaWEifSwgImV2ZW50X3R5cGUiOiAiT2JzZXJ2YXRpb25UcmFuc2Zvcm1lZEVSIn0=',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "gundi_cellstop_f870e228-4a65-40f0-888c-41bdc1124c3c",
@@ -769,7 +769,7 @@ def observation_v2_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJtYW51ZmFjdHVyZXJfaWQiOiAiS1dENDU2IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiZWEyZDVmY2EtNzUyYS00YTQ0LWIxNzAtNjY4ZDc4MGRiODVlIiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTAtMDMgMTc6MzU6MDIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NDMsICJsYXQiOiAtNTEuNjg4MjI4fSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiA1fSwgInN1YmplY3Rfc3VidHlwZSI6ICJnaXJhZmZlIiwgIiI6IG51bGx9',
+                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfX0sICJldmVudF90eXBlIjogIk9ic2VydmF0aW9uVHJhbnNmb3JtZWRFUiJ9',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "awt",
@@ -800,7 +800,7 @@ def attachment_v2_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9',
+                'data': 'eyJldmVudF9pZCI6ICI5NjNkYmM1Ni03ZWVhLTQ5NDktYjM0ZS1hMWMwNWRhYWNjNGUiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6Mzg6MDQuNDA0NzM5KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImZpbGVfcGF0aCI6ICJhdHRhY2htZW50cy85YmVkYzAzZS04NDE1LTQ2ZGItYWE3MC03ODI0OTBjZGZmMzFfd2lsZF9kb2ctbWFsZS5zdmcifSwgImV2ZW50X3R5cGUiOiAiQXR0YWNobWVudFRyYW5zZm9ybWVkRVIifQ==',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "awt",
