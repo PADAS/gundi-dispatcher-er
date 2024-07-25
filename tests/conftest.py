@@ -40,6 +40,24 @@ def dispatched_event():
 
 
 @pytest.fixture
+def dispatched_event_trace():
+    return schemas_v2.GundiTrace(
+        object_id='6cb82182-51b2-4309-ba83-c99ed8e61ae8',
+        object_type='ev',
+        related_to=None,
+        data_provider='d88ac520-2bf6-4e6b-ab09-38ed1ec6947a',
+        destination='338225f3-91f9-4fe1-b013-353a229ce504',
+        delivered_at=datetime.datetime.now(tz=datetime.timezone.utc),
+        external_id='bf7e56c7-0751-4899-844f-b5888eb813b1',
+        created_at=datetime.datetime.now(tz=datetime.timezone.utc),
+        updated_at=None,
+        last_update_delivered_at=None,
+        is_duplicate=False,
+        has_error=False
+    )
+
+
+@pytest.fixture
 def mock_cache_with_cached_event(mocker, dispatched_event):
     mock_cache = mocker.MagicMock()
     mock_cache.get.side_effect = (None, dispatched_event.json())
@@ -150,7 +168,6 @@ def mock_gundi_client_with_internal_exception(
     return mock_client
 
 
-
 @pytest.fixture
 def mock_gundi_client_class_with_with_500_error(mocker, mock_gundi_client_with_500_error):
     mock_gundi_client_class_with_error = mocker.MagicMock()
@@ -218,6 +235,9 @@ def mock_erclient_class(
     erclient_mock.post_report.return_value = async_return(
         post_report_response
     )
+    erclient_mock.patch_report.return_value = async_return(
+        patch_report_reponse
+    )
     erclient_mock.post_report_attachment.return_value = async_return(
         post_report_attachment_response
     )
@@ -256,8 +276,6 @@ def mock_erclient_class_with_service_unavailable_error(
     return mocked_erclient_class
 
 
-
-
 @pytest.fixture
 def mock_get_cloud_storage(mocker):
     return mocker.MagicMock()
@@ -291,6 +309,11 @@ def post_report_response():
              'user': {'username': 'gundi_serviceaccount', 'first_name': 'Gundi', 'last_name': 'Service Account',
                       'id': '408388d0-bb42-43f2-a2c3-6805bcb5f315', 'content_type': 'accounts.user'},
              'type': 'add_event'}], 'patrols': []}
+
+
+@pytest.fixture
+def patch_report_reponse():
+    return {}
 
 
 @pytest.fixture
@@ -509,7 +532,6 @@ def position_as_cloud_event_with_future_timestamp():
     )
 
 
-
 @pytest.fixture
 def position_as_cloud_event_with_old_timestamp():
     old_datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=25)
@@ -588,11 +610,13 @@ def cameratrap_event_as_cloud_event():
 def mock_gundi_client_v2(
         mocker,
         destination_integration_v2,
+        dispatched_event_trace
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_integration_details.return_value = async_return(
         destination_integration_v2
     )
+    mock_client.get_traces.return_value = async_return([dispatched_event_trace])
     mock_client.__aenter__.return_value = mock_client
     return mock_client
 
@@ -695,6 +719,38 @@ def event_v2_as_cloud_event():
 
 
 @pytest.fixture
+def event_update_v2_as_cloud_event(dispatched_event_trace):
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+                "attributes": {
+                    "gundi_version": "v2",
+                    "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                    "gundi_id": str(dispatched_event_trace.object_id),
+                    "related_to": "None",
+                    "stream_type": "evu",
+                    "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                    "external_source_id": "camera123",
+                    "destination_id": str(dispatched_event_trace.destination),
+                    "data_provider_id": str(dispatched_event_trace.data_provider),
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
 def event_v2_with_provider_key_as_cloud_event():
     return CloudEvent(
         attributes={
@@ -757,6 +813,7 @@ def observation_v2_with_provider_key_as_cloud_event():
         }
     )
 
+
 @pytest.fixture
 def observation_v2_as_cloud_event():
     return CloudEvent(
@@ -787,6 +844,7 @@ def observation_v2_as_cloud_event():
             'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
         }
     )
+
 
 @pytest.fixture
 def attachment_v2_as_cloud_event():
