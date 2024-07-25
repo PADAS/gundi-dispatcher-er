@@ -40,6 +40,24 @@ def dispatched_event():
 
 
 @pytest.fixture
+def dispatched_event_trace():
+    return schemas_v2.GundiTrace(
+        object_id='6cb82182-51b2-4309-ba83-c99ed8e61ae8',
+        object_type='ev',
+        related_to=None,
+        data_provider='d88ac520-2bf6-4e6b-ab09-38ed1ec6947a',
+        destination='338225f3-91f9-4fe1-b013-353a229ce504',
+        delivered_at=datetime.datetime.now(tz=datetime.timezone.utc),
+        external_id='bf7e56c7-0751-4899-844f-b5888eb813b1',
+        created_at=datetime.datetime.now(tz=datetime.timezone.utc),
+        updated_at=None,
+        last_update_delivered_at=None,
+        is_duplicate=False,
+        has_error=False
+    )
+
+
+@pytest.fixture
 def mock_cache_with_cached_event(mocker, dispatched_event):
     mock_cache = mocker.MagicMock()
     mock_cache.get.side_effect = (None, dispatched_event.json())
@@ -150,7 +168,6 @@ def mock_gundi_client_with_internal_exception(
     return mock_client
 
 
-
 @pytest.fixture
 def mock_gundi_client_class_with_with_500_error(mocker, mock_gundi_client_with_500_error):
     mock_gundi_client_class_with_error = mocker.MagicMock()
@@ -218,6 +235,9 @@ def mock_erclient_class(
     erclient_mock.post_report.return_value = async_return(
         post_report_response
     )
+    erclient_mock.patch_report.return_value = async_return(
+        patch_report_reponse
+    )
     erclient_mock.post_report_attachment.return_value = async_return(
         post_report_attachment_response
     )
@@ -256,8 +276,6 @@ def mock_erclient_class_with_service_unavailable_error(
     return mocked_erclient_class
 
 
-
-
 @pytest.fixture
 def mock_get_cloud_storage(mocker):
     return mocker.MagicMock()
@@ -291,6 +309,11 @@ def post_report_response():
              'user': {'username': 'gundi_serviceaccount', 'first_name': 'Gundi', 'last_name': 'Service Account',
                       'id': '408388d0-bb42-43f2-a2c3-6805bcb5f315', 'content_type': 'accounts.user'},
              'type': 'add_event'}], 'patrols': []}
+
+
+@pytest.fixture
+def patch_report_reponse():
+    return {}
 
 
 @pytest.fixture
@@ -509,7 +532,6 @@ def position_as_cloud_event_with_future_timestamp():
     )
 
 
-
 @pytest.fixture
 def position_as_cloud_event_with_old_timestamp():
     old_datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=25)
@@ -588,11 +610,13 @@ def cameratrap_event_as_cloud_event():
 def mock_gundi_client_v2(
         mocker,
         destination_integration_v2,
+        dispatched_event_trace
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_integration_details.return_value = async_return(
         destination_integration_v2
     )
+    mock_client.get_traces.return_value = async_return([dispatched_event_trace])
     mock_client.__aenter__.return_value = mock_client
     return mock_client
 
@@ -674,7 +698,7 @@ def event_v2_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJsZW9wYXJkX3NpZ2h0aW5nIiwgImV2ZW50X2RldGFpbHMiOiB7InNpdGVfbmFtZSI6ICJDYW1lcmEyQSIsICJzcGVjaWVzIjogIkxlb3BhcmQiLCAidGFncyI6IFsiYWR1bHQiLCAibWFsZSJdLCAiYW5pbWFsX2NvdW50IjogMn0sICJ0aW1lIjogIjIwMjMtMDYtMjMgMDA6NTE6MDArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDIwLjgwNjc4NSwgImxhdGl0dWRlIjogLTU1Ljc4NDk5OH19',
+                'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "awt",
@@ -693,6 +717,39 @@ def event_v2_as_cloud_event():
         }
     )
 
+
+@pytest.fixture
+def event_update_v2_as_cloud_event(dispatched_event_trace):
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+                "attributes": {
+                    "gundi_version": "v2",
+                    "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                    "gundi_id": str(dispatched_event_trace.object_id),
+                    "related_to": "None",
+                    "stream_type": "evu",
+                    "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                    "external_source_id": "camera123",
+                    "destination_id": str(dispatched_event_trace.destination),
+                    "data_provider_id": str(dispatched_event_trace.data_provider),
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
 @pytest.fixture
 def event_v2_with_provider_key_as_cloud_event():
     return CloudEvent(
@@ -705,7 +762,7 @@ def event_v2_with_provider_key_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJ0aXRsZSI6ICJBbmltYWwgRGV0ZWN0ZWQiLCAiZXZlbnRfdHlwZSI6ICJ3aWxkbGlmZV9zaWdodGluZ19yZXAiLCAiZXZlbnRfZGV0YWlscyI6IHsic2l0ZV9uYW1lIjogIkNhbWVyYTJNIiwgInNwZWNpZXMiOiAibGlvbiIsICJ0YWdzIjogWyJhZHVsdCIsICJtYWxlIl0sICJhbmltYWxfY291bnQiOiAyfSwgInRpbWUiOiAiMjAyMy0xMi0wNyAxNDoyNTowMCswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTcyLjcwNDQ1NSwgImxhdGl0dWRlIjogLTUxLjY4ODY1OH0sICJwcm92aWRlcl9rZXkiOiAibWFwaXBlZGlhIn0=',
+                'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJnZW9tZXRyeSI6IHt9LCAicHJvdmlkZXJfa2V5IjogIm1hcGlwZWRpYSJ9LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "gundi_traptagger_f870e228-4a65-40f0-888c-41bdc1124c3c",
@@ -737,7 +794,7 @@ def observation_v2_with_provider_key_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJtYW51ZmFjdHVyZXJfaWQiOiAiQ0VMMDA3IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAidGVzdC1kZXZpY2UtMDA3IiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTItMDcgMTU6MzU6MTgrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NTMsICJsYXQiOiAtNTEuNjg4MjQyfSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiAzMH0sICJzdWJqZWN0X3N1YnR5cGUiOiAiY2VsbHN0b3AtdmVoaWNsZSIsICJwcm92aWRlcl9rZXkiOiAibWFwaXBlZGlhIn0=',
+                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfSwgInByb3ZpZGVyX2tleSI6ICJtYXBpcGVkaWEifSwgImV2ZW50X3R5cGUiOiAiT2JzZXJ2YXRpb25UcmFuc2Zvcm1lZEVSIn0=',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "gundi_cellstop_f870e228-4a65-40f0-888c-41bdc1124c3c",
@@ -756,6 +813,7 @@ def observation_v2_with_provider_key_as_cloud_event():
         }
     )
 
+
 @pytest.fixture
 def observation_v2_as_cloud_event():
     return CloudEvent(
@@ -768,7 +826,7 @@ def observation_v2_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJtYW51ZmFjdHVyZXJfaWQiOiAiS1dENDU2IiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiZWEyZDVmY2EtNzUyYS00YTQ0LWIxNzAtNjY4ZDc4MGRiODVlIiwgInJlY29yZGVkX2F0IjogIjIwMjMtMTAtMDMgMTc6MzU6MDIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbiI6IC03Mi43MDQ0NDMsICJsYXQiOiAtNTEuNjg4MjI4fSwgImFkZGl0aW9uYWwiOiB7InNwZWVkX2ttcGgiOiA1fSwgInN1YmplY3Rfc3VidHlwZSI6ICJnaXJhZmZlIiwgIiI6IG51bGx9',
+                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfX0sICJldmVudF90eXBlIjogIk9ic2VydmF0aW9uVHJhbnNmb3JtZWRFUiJ9',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "awt",
@@ -787,6 +845,7 @@ def observation_v2_as_cloud_event():
         }
     )
 
+
 @pytest.fixture
 def attachment_v2_as_cloud_event():
     return CloudEvent(
@@ -799,7 +858,7 @@ def attachment_v2_as_cloud_event():
         },
         data={
             'message': {
-                'data': 'eyJmaWxlX3BhdGgiOiAiYXR0YWNobWVudHMvZjFhODg5NGItZmYyZS00Mjg2LTkwYTAtOGYxNzMwM2U5MWRmXzIwMjMtMDYtMjYtMTA1M19sZW9wYXJkLmpwZyJ9',
+                'data': 'eyJldmVudF9pZCI6ICI5NjNkYmM1Ni03ZWVhLTQ5NDktYjM0ZS1hMWMwNWRhYWNjNGUiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6Mzg6MDQuNDA0NzM5KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImZpbGVfcGF0aCI6ICJhdHRhY2htZW50cy85YmVkYzAzZS04NDE1LTQ2ZGItYWE3MC03ODI0OTBjZGZmMzFfd2lsZF9kb2ctbWFsZS5zdmcifSwgImV2ZW50X3R5cGUiOiAiQXR0YWNobWVudFRyYW5zZm9ybWVkRVIifQ==',
                 'attributes': {
                     "gundi_version": "v2",
                     "provider_key": "awt",
