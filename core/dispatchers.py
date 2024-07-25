@@ -210,7 +210,7 @@ class EREventDispatcher(ERDispatcherV2):
                     data=event_cleaned
                 )
             except Exception as ex:
-                logger.exception(f"Exception raised sending to dest {ex}")
+                logger.exception(f"Error sending event to {client.service_root}: \n{type(ex)}: {ex}")
                 raise ex
 
 
@@ -226,7 +226,7 @@ class EREventUpdateDispatcher(ERDispatcherV2):
                     event_id=er_event_id, data=event_update.changes
                 )
             except Exception as ex:
-                logger.exception(f"Error patching event: {ex}")
+                logger.exception(f"Error patching event in {client.service_root}: \n{type(ex)}: {ex}")
                 raise ex
 
 
@@ -252,7 +252,7 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
                 report_id=external_event_id, file=file
             )
         except Exception as ex:
-            logger.exception(f"exception raised sending to dest {ex}")
+            logger.exception(f"Error sending attachment to {self.er_client.service_root}: \n{type(ex)}: {ex}")
             raise ex
         else:
             self.cloud_storage.remove(file)
@@ -269,7 +269,7 @@ class ERObservationDispatcher(ERDispatcherV2):
                 observation_cleaned = json.loads(observation.json(exclude_none=True, exclude_unset=True))
                 return await client.post_sensor_observation(observation_cleaned)
             except Exception as ex:
-                logger.exception(f"exception raised sending to dest {ex}")
+                logger.exception(f"Error sending observation to {client.service_root}: \n{type(ex)}: {ex}")
                 raise ex
 
 
