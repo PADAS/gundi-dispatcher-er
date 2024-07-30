@@ -29,6 +29,7 @@ async def test_process_position_successfully(
     mocker.patch("core.utils._cache_db", mock_cache)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.services.pubsub", mock_pubsub_client)
     await process_event(position)
     assert mock_erclient_class.called == expected
     assert mock_erclient_class.return_value.post_sensor_observation.called == expected
