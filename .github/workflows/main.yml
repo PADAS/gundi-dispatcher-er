@@ -44,7 +44,7 @@ jobs:
   upload_dev:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [vars, zip]
+    needs: [vars, zip, run_unit_tests]
     with:
       environment: dev
       file_name: ${{ needs.vars.outputs.file_name }}
@@ -52,7 +52,7 @@ jobs:
   upload_stage:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, zip]
+    needs: [vars, zip, run_unit_tests]
     with:
       environment: stage
       file_name: ${{ needs.vars.outputs.file_name }}
@@ -60,7 +60,7 @@ jobs:
   upload_prod:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, zip, upload_stage]
+    needs: [vars, zip,run_unit_tests, upload_stage]
     with:
       environment: prod
       file_name: ${{ needs.vars.outputs.file_name }}
