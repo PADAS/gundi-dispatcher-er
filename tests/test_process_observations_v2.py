@@ -30,6 +30,27 @@ async def test_process_event_v2_successfully(
 
 
 @pytest.mark.asyncio
+async def test_process_event_update_v2_successfully(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+    event_update_v2_as_cloud_event
+):
+    # Mock external dependencies
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    await process_event(event_update_v2_as_cloud_event)
+    # Check that the report was patched in ER
+    assert mock_erclient_class.return_value.__aenter__.called
+    assert mock_erclient_class.return_value.patch_report.called
+
+
+
+@pytest.mark.asyncio
 async def test_process_attachment_v2_successfully(
     mocker,
     mock_cache_with_cached_event,
