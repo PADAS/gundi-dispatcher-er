@@ -5,7 +5,7 @@ on:
     branches:
         - main
         - 'release-**'
-        - 'gundi-3068'
+
 env:
   TRACING_ENABLED: ${{secrets.TRACING_ENABLED}}
 
