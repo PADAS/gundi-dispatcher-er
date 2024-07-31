@@ -5,6 +5,11 @@ on:
     branches:
         - main
         - 'release-**'
+  pull_request:
+    types: [labeled, opened, synchronize, reopened]
+
+env:
+  TRACING_ENABLED: ${{secrets.TRACING_ENABLED}}
 
 jobs:
   vars:
@@ -17,6 +22,24 @@ jobs:
         run: |
           echo "file_name=er-dispatcher-src-${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+  run_unit_tests:
+    runs-on: ubuntu-latest
+    needs: [vars]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8' 
+      - name: Install pip
+        run: python -m ensurepip --upgrade
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest
+        env:
+          TRACING_ENABLED: ${{ secrets.TRACING_ENABLED }}
+
   zip:
     uses: PADAS/gundi-workflows/.github/workflows/zip_files.yml@main
     needs: vars
@@ -27,7 +50,7 @@ jobs:
   upload_dev:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [vars, zip]
+    needs: [vars, zip, run_unit_tests]
     with:
       environment: dev
       file_name: ${{ needs.vars.outputs.file_name }}
@@ -35,7 +58,7 @@ jobs:
   upload_stage:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, zip]
+    needs: [vars, zip, run_unit_tests]
     with:
       environment: stage
       file_name: ${{ needs.vars.outputs.file_name }}
@@ -43,7 +66,7 @@ jobs:
   upload_prod:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, zip, upload_stage]
+    needs: [vars, zip,run_unit_tests, upload_stage]
     with:
       environment: prod
       file_name: ${{ needs.vars.outputs.file_name }}
