@@ -321,7 +321,7 @@ async def get_dispatched_observation(gundi_id: str, destination_id: str) -> gund
                 try:
                     filters = {
                         "object_id": gundi_id,
-                        "destination_id": destination_id,
+                        "destination": destination_id,
                     }
                     traces = await portal_v2.get_traces(params=filters)
                     observation_trace = traces[0]
