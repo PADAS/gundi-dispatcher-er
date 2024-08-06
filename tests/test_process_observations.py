@@ -14,7 +14,7 @@ async def test_process_position_successfully(
     request,
     expected,
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
@@ -26,7 +26,7 @@ async def test_process_position_successfully(
     mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
         [outbound_configuration_gcp_pubsub]
     )
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.services.pubsub", mock_pubsub_client)
@@ -38,7 +38,7 @@ async def test_process_position_successfully(
 @pytest.mark.asyncio
 async def test_process_geoevent_successfully(
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
@@ -49,7 +49,7 @@ async def test_process_geoevent_successfully(
     mock_gundi_client_class.get_outbound_integration_list.return_value = async_return(
         [outbound_configuration_gcp_pubsub]
     )
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     await process_event(geoevent_as_cloud_event)
@@ -60,7 +60,7 @@ async def test_process_geoevent_successfully(
 @pytest.mark.asyncio
 async def test_process_cameratrap_event_successfully(
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
@@ -72,7 +72,7 @@ async def test_process_cameratrap_event_successfully(
     mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
         [outbound_configuration_gcp_pubsub]
     )
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
@@ -85,14 +85,14 @@ async def test_process_cameratrap_event_successfully(
 @pytest.mark.asyncio
 async def test_raise_exception_on_portal_connection_error(
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class_with_client_connect_error,
     mock_erclient_class,
     mock_pubsub_client,
     position_as_cloud_event,
     outbound_configuration_gcp_pubsub,
 ):
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_client_connect_error)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     with pytest.raises(Exception) as e_info:
@@ -104,14 +104,14 @@ async def test_raise_exception_on_portal_connection_error(
 @pytest.mark.asyncio
 async def test_raise_exception_on_portal_500_error(
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class_with_with_500_error,
     mock_erclient_class,
     mock_pubsub_client,
     position_as_cloud_event,
     outbound_configuration_gcp_pubsub,
 ):
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_with_500_error)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     with pytest.raises(Exception) as e_info:
@@ -123,14 +123,14 @@ async def test_raise_exception_on_portal_500_error(
 @pytest.mark.asyncio
 async def test_raise_exception_on_internal_exception(
     mocker,
-    mock_cache,
+        mock_cache_empty,
     mock_gundi_client_class_with_internal_exception,
     mock_erclient_class,
     mock_pubsub_client,
     position_as_cloud_event,
     outbound_configuration_gcp_pubsub,
 ):
-    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_internal_exception)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     # Check that unhandled exceptions are raised so GCP can retry
