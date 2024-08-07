@@ -21,7 +21,7 @@ def async_return(result):
 
 
 @pytest.fixture
-def mock_cache(mocker):
+def mock_cache_empty(mocker):
     mock_cache = mocker.MagicMock()
     mock_cache.get.return_value = None
     return mock_cache
@@ -40,15 +40,15 @@ def dispatched_event():
 
 
 @pytest.fixture
-def dispatched_event_trace():
+def dispatched_event_trace(dispatched_event):
     return schemas_v2.GundiTrace(
-        object_id='6cb82182-51b2-4309-ba83-c99ed8e61ae8',
+        object_id=str(dispatched_event.gundi_id),
         object_type='ev',
         related_to=None,
-        data_provider='d88ac520-2bf6-4e6b-ab09-38ed1ec6947a',
-        destination='338225f3-91f9-4fe1-b013-353a229ce504',
-        delivered_at=datetime.datetime.now(tz=datetime.timezone.utc),
-        external_id='bf7e56c7-0751-4899-844f-b5888eb813b1',
+        data_provider=str(dispatched_event.data_provider_id),
+        destination=str(dispatched_event.destination_id),
+        delivered_at=dispatched_event.delivered_at,
+        external_id=dispatched_event.external_id,
         created_at=datetime.datetime.now(tz=datetime.timezone.utc),
         updated_at=None,
         last_update_delivered_at=None,
@@ -58,9 +58,16 @@ def dispatched_event_trace():
 
 
 @pytest.fixture
-def mock_cache_with_cached_event(mocker, dispatched_event):
+def mock_cache_with_one_miss_then_hit(mocker, dispatched_event):
     mock_cache = mocker.MagicMock()
     mock_cache.get.side_effect = (None, dispatched_event.json())
+    return mock_cache
+
+
+@pytest.fixture
+def mock_cache_with_cached_event(mocker, dispatched_event):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = dispatched_event.json()
     return mock_cache
 
 
