@@ -15,7 +15,7 @@ async def test_process_event_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-        event_v2_as_request
+    event_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -37,7 +37,7 @@ async def test_process_event_update_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-        event_update_v2_as_request
+    event_update_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -96,7 +96,7 @@ async def test_process_observation_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-        observation_v2_as_request
+    observation_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -121,7 +121,7 @@ async def test_system_event_is_published_on_successful_delivery(
     mock_erclient_class,
     mock_pubsub_client,
     mock_gundi_client_v2_class,
-        event_v2_as_request,
+    event_v2_as_request,
     observation_delivered_pubsub_message
 ):
 
@@ -148,12 +148,12 @@ async def test_system_event_is_published_on_successful_delivery(
 @pytest.mark.asyncio
 async def test_system_event_is_published_on_delivery_failure(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client,
     mock_erclient_class_with_service_unavailable_error,
     mock_pubsub_client_with_observation_delivery_failure,
     mock_gundi_client_v2_class,
-        event_v2_as_request,
+    event_v2_as_request,
     observation_delivery_failure_pubsub_message
 ):
     # Mock external dependencies
@@ -181,11 +181,11 @@ async def test_system_event_is_published_on_delivery_failure(
 @pytest.mark.asyncio
 async def test_process_event_v2_with_custom_provider_key(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-        event_v2_with_provider_key_as_request
+    event_v2_with_provider_key_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -203,11 +203,11 @@ async def test_process_event_v2_with_custom_provider_key(
 @pytest.mark.asyncio
 async def test_process_observation_v2_with_custom_provider_key(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-        observation_v2_with_provider_key_as_request
+    observation_v2_with_provider_key_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -243,12 +243,12 @@ async def test_raise_exception_on_internal_exception(
     with pytest.raises(Exception):
         await process_request(event_v2_as_request)
 
+
 @pytest.mark.asyncio
 async def test_get_dispatched_observation_from_cache(
     mocker,
     mock_cache_with_cached_event,
     dispatched_event,
-    observation_v2_as_cloud_event
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_with_cached_event)
@@ -266,7 +266,6 @@ async def test_get_dispatched_observation_from_portal(
     mock_cache_empty,
     mock_gundi_client_v2_class,
     dispatched_event,
-    observation_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
