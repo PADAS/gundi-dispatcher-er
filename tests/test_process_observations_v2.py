@@ -15,14 +15,14 @@ async def test_process_event_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    event_v2_as_cloud_event
+        event_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(event_v2_as_cloud_event)
+    await process_request(event_v2_as_request)
     # Check that the report was sent o ER
     assert mock_erclient_class.return_value.__aenter__.called
     assert mock_erclient_class.return_value.post_report.called
@@ -37,14 +37,14 @@ async def test_process_event_update_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    event_update_v2_as_cloud_event
+        event_update_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(event_update_v2_as_cloud_event)
+    await process_request(event_update_v2_as_request)
     # Check that the report was patched in ER
     assert mock_erclient_class.return_value.__aenter__.called
     assert mock_erclient_class.return_value.patch_report.called
@@ -60,7 +60,7 @@ async def test_process_attachment_v2_successfully(
     mock_pubsub_client,
     mock_get_cloud_storage,
     dispatched_event,
-    attachment_v2_as_cloud_event
+        attachment_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_with_one_miss_then_hit)
@@ -68,7 +68,7 @@ async def test_process_attachment_v2_successfully(
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(attachment_v2_as_cloud_event)
+    await process_request(attachment_v2_as_request)
     # Check that the report was sent o ER
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.post_report_attachment.called
@@ -78,8 +78,9 @@ async def test_process_attachment_v2_successfully(
     mock_cache_with_one_miss_then_hit.get.assert_any_call(event_cache_key)
     # Check that the trace was written to redis db
     assert mock_cache_with_one_miss_then_hit.setex.called
-    attachment_gundi_id = attachment_v2_as_cloud_event.data["message"]["attributes"]["gundi_id"]
-    attachment_destination_id = attachment_v2_as_cloud_event.data["message"]["attributes"]["destination_id"]
+    request_data = attachment_v2_as_request.get_json()
+    attachment_gundi_id = request_data["message"]["attributes"]["gundi_id"]
+    attachment_destination_id = request_data["message"]["attributes"]["destination_id"]
     attachment_cache_key = f"dispatched_observation.{attachment_gundi_id}.{attachment_destination_id}"
     mock_cache_with_one_miss_then_hit.setex.assert_any_call(
         name=attachment_cache_key,
@@ -95,14 +96,14 @@ async def test_process_observation_v2_successfully(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    observation_v2_as_cloud_event
+        observation_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(observation_v2_as_cloud_event)
+    await process_request(observation_v2_as_request)
     # Check that the config was retrieved from the portal
     assert mock_gundi_client_v2_class.return_value.get_integration_details.called
     # Check that the observation was sent o ER
@@ -120,7 +121,7 @@ async def test_system_event_is_published_on_successful_delivery(
     mock_erclient_class,
     mock_pubsub_client,
     mock_gundi_client_v2_class,
-    event_v2_as_cloud_event,
+        event_v2_as_request,
     observation_delivered_pubsub_message
 ):
 
@@ -129,7 +130,7 @@ async def test_system_event_is_published_on_successful_delivery(
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(event_v2_as_cloud_event)
+    await process_request(event_v2_as_request)
     # Check that the report was sent o ER
     assert mock_erclient_class.return_value.__aenter__.called
     assert mock_erclient_class.return_value.post_report.called
@@ -152,7 +153,7 @@ async def test_system_event_is_published_on_delivery_failure(
     mock_erclient_class_with_service_unavailable_error,
     mock_pubsub_client_with_observation_delivery_failure,
     mock_gundi_client_v2_class,
-    event_v2_as_cloud_event,
+        event_v2_as_request,
     observation_delivery_failure_pubsub_message
 ):
     # Mock external dependencies
@@ -162,7 +163,7 @@ async def test_system_event_is_published_on_delivery_failure(
     mocker.patch("core.utils.pubsub", mock_pubsub_client_with_observation_delivery_failure)
     # Check that the dispatcher raises an exception so the message is retried later
     with pytest.raises(DispatcherException):
-        await process_request(event_v2_as_cloud_event)
+        await process_request(event_v2_as_request)
     # Check that the call to send the report to ER was made
     assert mock_erclient_class_with_service_unavailable_error.return_value.__aenter__.called
     assert mock_erclient_class_with_service_unavailable_error.return_value.post_report.called
@@ -184,14 +185,14 @@ async def test_process_event_v2_with_custom_provider_key(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    event_v2_with_provider_key_as_cloud_event
+        event_v2_with_provider_key_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(event_v2_with_provider_key_as_cloud_event)
+    await process_request(event_v2_with_provider_key_as_request)
     # Check that the report was sent o ER
     assert mock_erclient_class.return_value.__aenter__.called
     assert mock_erclient_class.return_value.post_report.called
@@ -206,14 +207,14 @@ async def test_process_observation_v2_with_custom_provider_key(
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    observation_v2_with_provider_key_as_cloud_event
+        observation_v2_with_provider_key_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_request(observation_v2_with_provider_key_as_cloud_event)
+    await process_request(observation_v2_with_provider_key_as_request)
     # Check that the config was retrieved from the portal
     assert mock_gundi_client_v2_class.return_value.get_integration_details.called
     # Check that the observation was sent o ER
@@ -230,7 +231,7 @@ async def test_raise_exception_on_internal_exception(
         mock_erclient_class,
         mock_pubsub_client,
         mock_gundi_client_v2_with_internal_exception,
-        event_v2_as_cloud_event,
+        event_v2_as_request,
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -240,7 +241,7 @@ async def test_raise_exception_on_internal_exception(
 
     # Check that the dispatcher raises an exception so the message is retried later
     with pytest.raises(Exception):
-        await process_request(event_v2_as_cloud_event)
+        await process_request(event_v2_as_request)
 
 @pytest.mark.asyncio
 async def test_get_dispatched_observation_from_cache(
@@ -265,7 +266,7 @@ async def test_get_dispatched_observation_from_portal(
     mock_cache_empty,
     mock_gundi_client_v2_class,
     dispatched_event,
-    observation_v2_as_cloud_event
+    observation_v2_as_request
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)

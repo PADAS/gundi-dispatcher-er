@@ -1,5 +1,8 @@
 import datetime
+import json
+
 import aiohttp
+import functions_framework
 import httpx
 import pytest
 import asyncio
@@ -694,195 +697,201 @@ def destination_integration_v2():
 
 
 @pytest.fixture
-def event_v2_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
-                'attributes': {
-                    "gundi_version": "v2",
-                    "provider_key": "awt",
-                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                    "related_to": "None",
-                    "stream_type": "ev",
-                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                    "external_source_id": "Xyz123",
-                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def event_v2_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "awt",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "ev",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def event_update_v2_as_cloud_event(dispatched_event_trace):
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
-                "attributes": {
-                    "gundi_version": "v2",
-                    "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
-                    "gundi_id": str(dispatched_event_trace.object_id),
-                    "related_to": "None",
-                    "stream_type": "evu",
-                    "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
-                    "external_source_id": "camera123",
-                    "destination_id": str(dispatched_event_trace.destination),
-                    "data_provider_id": str(dispatched_event_trace.data_provider),
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def event_update_v2_as_request(mocker, dispatched_event_trace):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+            "attributes": {
+                "gundi_version": "v2",
+                "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                "gundi_id": str(dispatched_event_trace.object_id),
+                "related_to": "None",
+                "stream_type": "evu",
+                "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                "external_source_id": "camera123",
+                "destination_id": str(dispatched_event_trace.destination),
+                "data_provider_id": str(dispatched_event_trace.data_provider),
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def event_v2_with_provider_key_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJnZW9tZXRyeSI6IHt9LCAicHJvdmlkZXJfa2V5IjogIm1hcGlwZWRpYSJ9LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
-                'attributes': {
-                    "gundi_version": "v2",
-                    "provider_key": "gundi_traptagger_f870e228-4a65-40f0-888c-41bdc1124c3c",
-                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                    "related_to": "None",
-                    "stream_type": "ev",
-                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                    "external_source_id": "Xyz123",
-                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def event_v2_with_provider_key_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJnZW9tZXRyeSI6IHt9LCAicHJvdmlkZXJfa2V5IjogIm1hcGlwZWRpYSJ9LCAiZXZlbnRfdHlwZSI6ICJFdmVudFRyYW5zZm9ybWVkRVIifQ==',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "gundi_traptagger_f870e228-4a65-40f0-888c-41bdc1124c3c",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "ev",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474844",
+            "message_id": "11937923011474844",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def observation_v2_with_provider_key_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfSwgInByb3ZpZGVyX2tleSI6ICJtYXBpcGVkaWEifSwgImV2ZW50X3R5cGUiOiAiT2JzZXJ2YXRpb25UcmFuc2Zvcm1lZEVSIn0=',
-                'attributes': {
-                    "gundi_version": "v2",
-                    "provider_key": "gundi_cellstop_f870e228-4a65-40f0-888c-41bdc1124c3c",
-                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                    "related_to": "None",
-                    "stream_type": "obv",
-                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                    "external_source_id": "Xyz123",
-                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def observation_v2_with_provider_key_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfSwgInByb3ZpZGVyX2tleSI6ICJtYXBpcGVkaWEifSwgImV2ZW50X3R5cGUiOiAiT2JzZXJ2YXRpb25UcmFuc2Zvcm1lZEVSIn0=',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "gundi_cellstop_f870e228-4a65-40f0-888c-41bdc1124c3c",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "obv",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474845",
+            "message_id": "11937923011474845",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def observation_v2_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfX0sICJldmVudF90eXBlIjogIk9ic2VydmF0aW9uVHJhbnNmb3JtZWRFUiJ9',
-                'attributes': {
-                    "gundi_version": "v2",
-                    "provider_key": "awt",
-                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                    "related_to": "None",
-                    "stream_type": "obv",
-                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                    "external_source_id": "Xyz123",
-                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def observation_v2_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTM6MjM6NDMuOTUyMDU2KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Im1hbnVmYWN0dXJlcl9pZCI6ICJ0ZXN0LWRldmljZSIsICJzb3VyY2VfdHlwZSI6ICJ0cmFja2luZy1kZXZpY2UiLCAic3ViamVjdF9uYW1lIjogIk1hcmlhbm8iLCAic3ViamVjdF90eXBlIjogIm1tLXRyYWNrZXIiLCAic3ViamVjdF9zdWJ0eXBlIjogIm1tLXRyYWNrZXIiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wNy0yMiAxMTo1MTowNSswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogLTcyLjcwNDQ1OSwgImxhdCI6IC01MS42ODgyNDZ9LCAiYWRkaXRpb25hbCI6IHsic3BlZWRfa21waCI6IDMwfX0sICJldmVudF90eXBlIjogIk9ic2VydmF0aW9uVHJhbnNmb3JtZWRFUiJ9',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "awt",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "obv",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474846",
+            "message_id": "11937923011474846",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def attachment_v2_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
-            'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJldmVudF9pZCI6ICI5NjNkYmM1Ni03ZWVhLTQ5NDktYjM0ZS1hMWMwNWRhYWNjNGUiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6Mzg6MDQuNDA0NzM5KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImZpbGVfcGF0aCI6ICJhdHRhY2htZW50cy85YmVkYzAzZS04NDE1LTQ2ZGItYWE3MC03ODI0OTBjZGZmMzFfd2lsZF9kb2ctbWFsZS5zdmcifSwgImV2ZW50X3R5cGUiOiAiQXR0YWNobWVudFRyYW5zZm9ybWVkRVIifQ==',
-                'attributes': {
-                    "gundi_version": "v2",
-                    "provider_key": "awt",
-                    "gundi_id": "f1a8894b-ff2e-4286-90a0-8f17303e91df",
-                    "related_to": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
-                    "stream_type": "att",
-                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-                    "external_source_id": "Xyz123",
-                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
-                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-                    "annotations": "{}",
-                    "tracing_context": "{}"
-                }
+def attachment_v2_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI5NjNkYmM1Ni03ZWVhLTQ5NDktYjM0ZS1hMWMwNWRhYWNjNGUiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6Mzg6MDQuNDA0NzM5KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImZpbGVfcGF0aCI6ICJhdHRhY2htZW50cy85YmVkYzAzZS04NDE1LTQ2ZGItYWE3MC03ODI0OTBjZGZmMzFfd2lsZF9kb2ctbWFsZS5zdmcifSwgImV2ZW50X3R5cGUiOiAiQXR0YWNobWVudFRyYW5zZm9ybWVkRVIifQ==',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "awt",
+                "gundi_id": "f1a8894b-ff2e-4286-90a0-8f17303e91df",
+                "related_to": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "stream_type": "att",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474847",
+            "message_id": "11937923011474847",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
