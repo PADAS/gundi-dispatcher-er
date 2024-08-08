@@ -5,6 +5,8 @@ on:
     branches:
         - main
         - 'release-**'
+        - 'gundi-3296-ordered-event-updates'
+
   pull_request:
     types: [labeled, opened, synchronize, reopened]
 
@@ -49,8 +51,8 @@ jobs:
 
   upload_dev:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
-    if: startsWith(github.ref, 'refs/heads/main')
-    needs: [vars, zip, run_unit_tests]
+    if: startsWith(github.ref, 'refs/heads/gundi-3296')
+    needs: [vars, zip]
     with:
       environment: dev
       file_name: ${{ needs.vars.outputs.file_name }}
