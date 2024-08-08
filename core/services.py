@@ -260,34 +260,32 @@ async def process_transformer_event_v2(raw_event, attributes):
         return await handler(event=parsed_event, attributes=attributes)
 
 
-def is_event_too_old(event):
-    logger.debug(f"event attributes: {event._attributes}")
-    timestamp = event._attributes.get("time")
+def is_too_old(timestamp):
     if not timestamp:
+        logger.warning("No timestamp found in Pubsub Message. Skipping age check.")
         return False
     try:  # The timestamp does not always include the microseconds part
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
     except ValueError:
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
     event_time = event_time.replace(tzinfo=timezone.utc)
-    current_time = datetime.now(timezone.utc)
-    # Notice: We have seen cloud events with future timestamps. Don't use .seconds
-    event_age_seconds = (current_time - event_time).total_seconds()
-    # Ignore events that are too old
+    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
 
 async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
     json_data = request.get_json()
-    transformed_observation, attributes = extract_fields_from_message(json_data["message"])
+    pubsub_message = json_data["message"]
+    transformed_observation, attributes = extract_fields_from_message(pubsub_message)
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.process_event", kind=SpanKind.CLIENT
     ) as current_span:
         # Handle retries
-        if is_event_too_old(request):
+        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
+        if is_too_old(timestamp):
             logger.warning(f"Event is too old (timestamp = {request._attributes.get('time')}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
