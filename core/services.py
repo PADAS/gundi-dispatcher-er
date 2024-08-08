@@ -286,7 +286,7 @@ async def process_request(request):
         # Handle retries
         timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
         if is_too_old(timestamp):
-            logger.warning(f"Event is too old (timestamp = {request._attributes.get('time')}) and will be sent to dead-letter.")
+            logger.warning(f"Event is too old (timestamp = {timestamp}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             return  # Skip the event
