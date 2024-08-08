@@ -1,16 +1,19 @@
 import asyncio
 import logging
-from functions_framework import cloud_event
+from functions_framework import http
 from core import tracing
-from core.services import process_event
+from core.services import process_request
 
 logger = logging.getLogger(__name__)
 
 
-# Wrapper to be able to run the async function
-@cloud_event
-def main(event):
-    print(f"CloudEvent received:\n{event}")
-    asyncio.run(process_event(event))
-    print(f"CloudEvent processed successfully.")
+@http
+def main(request):
+    logger.info(f"Request received:\n{request}")
+    body = request.data
+    headers = request.headers
+    print(f"Message Received.\n RAW body: {body}\n headers: {headers}")
+    logger.debug(f"Request received:\n{request}")
+    asyncio.run(process_request(request))
+    logger.info(f"Request processed successfully.")
     return {}

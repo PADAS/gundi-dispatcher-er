@@ -277,17 +277,18 @@ def is_event_too_old(event):
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
 
-async def process_event(event):
+async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
-    transformed_observation, attributes = extract_fields_from_message(event.data["message"])
+    json_data = request.get_json()
+    transformed_observation, attributes = extract_fields_from_message(json_data["message"])
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.process_event", kind=SpanKind.CLIENT
     ) as current_span:
         # Handle retries
-        if is_event_too_old(event):
-            logger.warning(f"Event is too old (timestamp = {event._attributes.get('time')}) and will be sent to dead-letter.")
+        if is_event_too_old(request):
+            logger.warning(f"Event is too old (timestamp = {request._attributes.get('time')}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             return  # Skip the event
