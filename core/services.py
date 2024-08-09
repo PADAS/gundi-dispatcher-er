@@ -283,6 +283,10 @@ async def process_request(request):
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.process_event", kind=SpanKind.CLIENT
     ) as current_span:
+        pubsub_message_id = pubsub_message.get("message_id")
+        current_span.set_attribute("pubsub_message_id", pubsub_message_id)
+        logger.debug(f"Received PubsubMessage(ID:{pubsub_message_id}): {pubsub_message}")
+        # ToDo Check duplicates using message_id
         # Handle retries
         timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
         if is_too_old(timestamp):
