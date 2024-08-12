@@ -1,11 +1,6 @@
 curl localhost:8080 \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "ce-id: 123451234512345" \
-  -H "ce-specversion: 1.0" \
-  -H "ce-time: 2024-07-24T12:51:00.789Z" \
-  -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
-  -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
         "data":"eyJldmVudF9pZCI6ICJhZTdmNjFkZi0yYjg1LTQ3MDMtOTVkYi0yYWUyNDI0YzBkZjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTQ6NTA6NTAuMDY1NjU0KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAibGlvbl9zaWdodGluZyIsICJ0aW1lIjogIjIwMjQtMDctMjQgMTQ6MTg6MTIrMDA6MDAiLCAibG9jYXRpb24iOiB7ImxvbmdpdHVkZSI6IDEzLjc4MzA2NSwgImxhdGl0dWRlIjogMTMuNjg4NjM1fSwgImV2ZW50X2RldGFpbHMiOiB7InNwZWNpZXMiOiAiTGlvbiJ9fSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=",
@@ -20,8 +15,12 @@ curl localhost:8080 \
           "destination_id":"f45b1d48-46fc-414b-b1ca-7b56b87b2020",
           "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
           "annotations":"{}",
-          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
-        }
+          "tracing_context":"{}"
+        },
+        "messageId": "11937923011474843",
+        "message_id": "11937923011474843",
+        "publishTime": "2024-07-24T12:51:00.789Z",
+        "publish_time": "2024-07-24T12:51:00.789Z"
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }'
@@ -43,7 +42,11 @@ curl localhost:8080 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -64,7 +67,11 @@ curl localhost:8080 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -84,7 +91,12 @@ curl localhost:8080 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{\"x-cloud-trace-context\": \"95f36c1f22b1cb599efc28243a631f7d/15139689239813763386;o=1\"}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -104,7 +116,11 @@ curl localhost:8080 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -119,8 +135,12 @@ curl localhost:8080 \
 #             "outbound_config_id":"1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
 #             "integration_id":"36485b4f-88cd-49c4-a723-0ddff1f580c4",
 #             "tracing_context":"{}"
-#          }
 #        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
+#      },
 #        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #      }'
 # CemeraTrap
@@ -133,7 +153,11 @@ curl localhost:8080 \
 #          "outbound_config_id":"5f658487-67f7-43f1-8896-d78778e49c30",
 #          "integration_id":"a244fddd-3f64-4298-81ed-b6fccc60cef8",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -147,7 +171,11 @@ curl localhost:8080 \
 #          "outbound_config_id":"9243a5e3-b16a-4dbd-ad32-197c58aeef59",
 #          "integration_id":"8311c4a5-ddab-4743-b8ab-d3d57a7c8212",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "11937923011474843",
+#        "message_id": "11937923011474843",
+#        "publishTime": "2024-07-24T12:51:00.789Z",
+#        "publish_time": "2024-07-24T12:51:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'

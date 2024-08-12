@@ -719,7 +719,8 @@ def event_v2_as_request(mocker):
             },
             "messageId": "11937923011474843",
             "message_id": "11937923011474843",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -752,7 +753,8 @@ def event_update_v2_as_request(mocker, dispatched_event_trace):
             },
             "messageId": "11937923011474843",
             "message_id": "11937923011474843",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -785,7 +787,8 @@ def event_v2_with_provider_key_as_request(mocker):
             },
             "messageId": "11937923011474844",
             "message_id": "11937923011474844",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -818,7 +821,8 @@ def observation_v2_with_provider_key_as_request(mocker):
             },
             "messageId": "11937923011474845",
             "message_id": "11937923011474845",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -851,7 +855,8 @@ def observation_v2_as_request(mocker):
             },
             "messageId": "11937923011474846",
             "message_id": "11937923011474846",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -884,7 +889,8 @@ def attachment_v2_as_request(mocker):
             },
             "messageId": "11937923011474847",
             "message_id": "11937923011474847",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb", "publishTime": "2024-08-08T20:03:09.876Z",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
