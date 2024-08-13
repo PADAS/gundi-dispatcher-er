@@ -570,50 +570,60 @@ def position_as_request_with_old_timestamp(mocker):
     mock_request.get_json.return_value = json_data
     return mock_request
 
+
 @pytest.fixture
-def geoevent_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJ0aXRsZSI6ICJSYWluZmFsbCIsICJldmVudF90eXBlIjogInJhaW5mYWxsX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJhbW91bnRfbW0iOiA2LCAiaGVpZ2h0X20iOiAzfSwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMToyNDowMi0wNzowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTU1Ljc4NDk4LCAibGF0aXR1ZGUiOiAyMC44MDY3ODV9fQ==',
-                'attributes': {
-                    'observation_type': 'ge', 'device_id': '003',
-                    'outbound_config_id': '9243a5e3-b16a-4dbd-ad32-197c58aeef59',
-                    'integration_id': '8311c4a5-ddab-4743-b8ab-d3d57a7c8212', 'tracing_context': '{}'
-                }
+def geoevent_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        "message": {
+            "data": 'eyJ0aXRsZSI6ICJSYWluZmFsbCIsICJldmVudF90eXBlIjogInJhaW5mYWxsX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJhbW91bnRfbW0iOiA2LCAiaGVpZ2h0X20iOiAzfSwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMToyNDowMi0wNzowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogLTU1Ljc4NDk4LCAibGF0aXR1ZGUiOiAyMC44MDY3ODV9fQ==',
+            "attributes": {
+                "observation_type": "ge",
+                "device_id": "003",
+                "outbound_config_id": "9243a5e3-b16a-4dbd-ad32-197c58aeef59",
+                "integration_id": "8311c4a5-ddab-4743-b8ab-d3d57a7c8212",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def cameratrap_event_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0', 'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            'message': {
-                'data': 'eyJmaWxlIjogImNhbWVyYXRyYXAuanBnIiwgImNhbWVyYV9uYW1lIjogIk1hcmlhbm8ncyBDYW1lcmEiLCAiY2FtZXJhX2Rlc2NyaXB0aW9uIjogInRlc3QgY2FtZXJhIiwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMTo1MTowMC0wMzowMCIsICJsb2NhdGlvbiI6ICJ7XCJsb25naXR1ZGVcIjogLTEyMi41LCBcImxhdGl0dWRlXCI6IDQ4LjY1fSJ9',
-                'attributes': {
-                    'observation_type': 'ct', 'device_id': 'Mariano Camera',
-                    'outbound_config_id': '5f658487-67f7-43f1-8896-d78778e49c30',
-                    'integration_id': 'a244fddd-3f64-4298-81ed-b6fccc60cef8', 'tracing_context': '{}'
-                }
+def cameratrap_event_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        "message": {
+            "data": 'eyJmaWxlIjogImNhbWVyYXRyYXAuanBnIiwgImNhbWVyYV9uYW1lIjogIk1hcmlhbm8ncyBDYW1lcmEiLCAiY2FtZXJhX2Rlc2NyaXB0aW9uIjogInRlc3QgY2FtZXJhIiwgInRpbWUiOiAiMjAyMy0wMy0wNyAxMTo1MTowMC0wMzowMCIsICJsb2NhdGlvbiI6ICJ7XCJsb25naXR1ZGVcIjogLTEyMi41LCBcImxhdGl0dWRlXCI6IDQ4LjY1fSJ9',
+            "attributes": {
+                "observation_type": "ct",
+                "device_id": "Mariano Camera",
+                "outbound_config_id": "5f658487-67f7-43f1-8896-d78778e49c30",
+                "integration_id": "a244fddd-3f64-4298-81ed-b6fccc60cef8",
+                "tracing_context": "{}"
             },
-            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
 
 
 @pytest.fixture

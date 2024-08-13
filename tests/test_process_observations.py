@@ -38,11 +38,11 @@ async def test_process_position_successfully(
 @pytest.mark.asyncio
 async def test_process_geoevent_successfully(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
-    geoevent_as_cloud_event,
+    geoevent_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     # Mock external dependencies
@@ -52,7 +52,7 @@ async def test_process_geoevent_successfully(
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
-    await process_request(geoevent_as_cloud_event)
+    await process_request(geoevent_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.__aenter__.return_value.post_report.called
 
@@ -60,12 +60,12 @@ async def test_process_geoevent_successfully(
 @pytest.mark.asyncio
 async def test_process_cameratrap_event_successfully(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
     mock_get_cloud_storage,
-    cameratrap_event_as_cloud_event,
+    cameratrap_event_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     # Mock external dependencies
@@ -77,7 +77,7 @@ async def test_process_cameratrap_event_successfully(
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
     #get_cloud_storage
-    await process_request(cameratrap_event_as_cloud_event)
+    await process_request(cameratrap_event_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.post_camera_trap_report.called
 
@@ -85,11 +85,11 @@ async def test_process_cameratrap_event_successfully(
 @pytest.mark.asyncio
 async def test_raise_exception_on_portal_connection_error(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_class_with_client_connect_error,
     mock_erclient_class,
     mock_pubsub_client,
-        position_as_request,
+    position_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -104,11 +104,11 @@ async def test_raise_exception_on_portal_connection_error(
 @pytest.mark.asyncio
 async def test_raise_exception_on_portal_500_error(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_class_with_with_500_error,
     mock_erclient_class,
     mock_pubsub_client,
-        position_as_request,
+    position_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -123,11 +123,11 @@ async def test_raise_exception_on_portal_500_error(
 @pytest.mark.asyncio
 async def test_raise_exception_on_internal_exception(
     mocker,
-        mock_cache_empty,
+    mock_cache_empty,
     mock_gundi_client_class_with_internal_exception,
     mock_erclient_class,
     mock_pubsub_client,
-        position_as_request,
+    position_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
@@ -145,7 +145,7 @@ async def test_process_position_with_faulty_cache_successfully(
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
-        position_as_request,
+    position_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     # Mock external dependencies
@@ -167,7 +167,7 @@ async def test_process_geoevent_with_faulty_cache_successfully(
     mock_gundi_client_class,
     mock_erclient_class,
     mock_pubsub_client,
-    geoevent_as_cloud_event,
+    geoevent_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     # Mock external dependencies
@@ -177,7 +177,7 @@ async def test_process_geoevent_with_faulty_cache_successfully(
     mocker.patch("core.utils._cache_db", mock_cache_with_connection_error)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
-    await process_request(geoevent_as_cloud_event)
+    await process_request(geoevent_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.__aenter__.return_value.post_report.called
 
@@ -190,7 +190,7 @@ async def test_process_cameratrap_event_with_faulty_cache_successfully(
     mock_erclient_class,
     mock_pubsub_client,
     mock_get_cloud_storage,
-    cameratrap_event_as_cloud_event,
+    cameratrap_event_as_request,
     outbound_configuration_gcp_pubsub,
 ):
     # Mock external dependencies
@@ -201,7 +201,6 @@ async def test_process_cameratrap_event_with_faulty_cache_successfully(
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
-    #get_cloud_storage
-    await process_request(cameratrap_event_as_cloud_event)
+    await process_request(cameratrap_event_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.post_camera_trap_report.called
