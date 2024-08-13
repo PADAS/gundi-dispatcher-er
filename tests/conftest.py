@@ -489,86 +489,86 @@ def outbound_configuration_gcp_pubsub():
 
 
 @pytest.fixture
-def position_as_cloud_event():
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0',
-            'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        },
-        data={
-            "message": {
-                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
-                "attributes": {
-                    "observation_type": "ps",
-                    "device_id": "018910980",
-                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
-                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
-                    "tracing_context": "{}"
-                }
+def position_as_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+            "attributes": {
+                "observation_type": "ps",
+                "device_id": "018910980",
+                "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                "tracing_context": "{}"
             },
-            "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def position_as_cloud_event_with_future_timestamp():
+def position_as_request_with_future_timestamp(mocker):
     future_datetime = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
     future_timestamp = future_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0',
-            'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': future_timestamp
-        },
-        data={
-            "message": {
-                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
-                "attributes": {
-                    "observation_type": "ps",
-                    "device_id": "018910980",
-                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
-                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
-                    "tracing_context": "{}"
-                }
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    json_data = {
+        'message': {
+            "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+            "attributes": {
+                "observation_type": "ps",
+                "device_id": "018910980",
+                "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                "tracing_context": "{}"
             },
-            "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
-        }
-    )
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "publishTime": f"{future_timestamp}",
+            "publish_time": f"{future_timestamp}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 
 @pytest.fixture
-def position_as_cloud_event_with_old_timestamp():
+def position_as_request_with_old_timestamp(mocker):
     old_datetime = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=25)
     old_timestamp = old_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    return CloudEvent(
-        attributes={
-            'specversion': '1.0',
-            'id': '123451234512345',
-            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
-            'type': 'google.cloud.pubsub.topic.v1.messagePublished', 'datacontenttype': 'application/json',
-            'time': old_timestamp
-        },
-        data={
-            "message": {
-                "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
-                "attributes": {
-                    "observation_type": "ps",
-                    "device_id": "018910980",
-                    "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
-                    "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
-                    "tracing_context": "{}"
-                }
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    json_data = {
+        'message': {
+            "data": "eyJtYW51ZmFjdHVyZXJfaWQiOiAiMDE4OTEwOTgwIiwgInNvdXJjZV90eXBlIjogInRyYWNraW5nLWRldmljZSIsICJzdWJqZWN0X25hbWUiOiAiTG9naXN0aWNzIFRydWNrIEEiLCAicmVjb3JkZWRfYXQiOiAiMjAyMy0wMy0wNyAwODo1OTowMC0wMzowMCIsICJsb2NhdGlvbiI6IHsibG9uIjogMzUuNDM5MTIsICJsYXQiOiAtMS41OTA4M30sICJhZGRpdGlvbmFsIjogeyJ2b2x0YWdlIjogIjcuNCIsICJmdWVsX2xldmVsIjogNzEsICJzcGVlZCI6ICI0MSBrcGgifX0=",
+            "attributes": {
+                "observation_type": "ps",
+                "device_id": "018910980",
+                "outbound_config_id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
+                "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+                "tracing_context": "{}"
             },
-            "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
-        }
-    )
-
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "publishTime": f"{old_timestamp}",
+            "publish_time": f"{old_timestamp}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
 
 @pytest.fixture
 def geoevent_as_cloud_event():
