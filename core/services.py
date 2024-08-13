@@ -269,7 +269,8 @@ def is_too_old(timestamp):
     except ValueError:
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
     event_time = event_time.replace(tzinfo=timezone.utc)
-    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
+    current_time = datetime.now(timezone.utc)
+    event_age_seconds = (current_time - event_time).total_seconds()
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
 
