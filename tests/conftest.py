@@ -726,6 +726,38 @@ def event_v2_as_cloud_event():
 
 
 @pytest.fixture
+def event_v2_with_state_as_cloud_event():
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJzdGF0ZSI6ICJhY3RpdmUifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=',
+                'attributes': {
+                    "gundi_version": "v2",
+                    "provider_key": "awt_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                    "related_to": "None",
+                    "stream_type": "ev",
+                    "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                    "external_source_id": "Xyz123",
+                    "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
 def event_update_v2_as_cloud_event(dispatched_event_trace):
     return CloudEvent(
         attributes={
@@ -738,6 +770,38 @@ def event_update_v2_as_cloud_event(dispatched_event_trace):
         data={
             'message': {
                 "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+                "attributes": {
+                    "gundi_version": "v2",
+                    "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                    "gundi_id": str(dispatched_event_trace.object_id),
+                    "related_to": "None",
+                    "stream_type": "evu",
+                    "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                    "external_source_id": "camera123",
+                    "destination_id": str(dispatched_event_trace.destination),
+                    "data_provider_id": str(dispatched_event_trace.data_provider),
+                    "annotations": "{}",
+                    "tracing_context": "{}"
+                }
+            },
+            'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+        }
+    )
+
+
+@pytest.fixture
+def event_update_v2_with_state_as_cloud_event(dispatched_event_trace):
+    return CloudEvent(
+        attributes={
+            'specversion': '1.0', 'id': '123451234512345',
+            'source': '//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC',
+            'type': 'google.cloud.pubsub.topic.v1.messagePublished',
+            'datacontenttype': 'application/json',
+            'time': datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        },
+        data={
+            'message': {
+                "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7InN0YXRlIjogInJlc29sdmVkIn19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
                 "attributes": {
                     "gundi_version": "v2",
                     "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",

@@ -1,53 +1,87 @@
+import base64
+import json
 from unittest.mock import ANY, call
-
 import pytest
 
+from gundi_core import schemas
 from core import settings
 from core.errors import DispatcherException
 from core.services import process_event
 from core.utils import get_dispatched_observation
 
 
+@pytest.mark.parametrize("event_v2", [
+    "event_v2_as_cloud_event",
+    "event_v2_with_state_as_cloud_event",
+])
 @pytest.mark.asyncio
 async def test_process_event_v2_successfully(
     mocker,
+    request,
     mock_cache_empty,
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    event_v2_as_cloud_event
+    event_v2
 ):
+    event_v2 = request.getfixturevalue(event_v2)
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_event(event_v2_as_cloud_event)
+    await process_event(event_v2)
     # Check that the report was sent o ER
     assert mock_erclient_class.return_value.__aenter__.called
-    assert mock_erclient_class.return_value.post_report.called
+    mock_post_report = mock_erclient_class.return_value.post_report
+    assert mock_post_report.called
     # Check that the trace was written to redis db
     assert mock_cache_empty.setex.called
+    # Check the payload sent to ER
+    post_report_data = mock_post_report.call_args.kwargs["data"]
+    cloud_event_data = event_v2.data["message"]["data"]
+    decoded_system_event = json.loads(base64.b64decode(cloud_event_data))
+    event_v2_data = decoded_system_event.get("payload")
+    er_event = schemas.v2.EREvent(**event_v2_data)
+    serialized_event = json.loads(er_event.json(exclude_none=True, exclude_unset=True))
+    assert post_report_data == serialized_event
 
 
+
+@pytest.mark.parametrize("event_update_v2", [
+    "event_update_v2_as_cloud_event",
+    "event_update_v2_with_state_as_cloud_event",
+])
 @pytest.mark.asyncio
 async def test_process_event_update_v2_successfully(
     mocker,
+    request,
     mock_cache_empty,
     mock_gundi_client_v2_class,
     mock_erclient_class,
     mock_pubsub_client,
-    event_update_v2_as_cloud_event
+    event_update_v2,
+    dispatched_event_trace
 ):
+    event_update_v2 = request.getfixturevalue(event_update_v2)
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
-    await process_event(event_update_v2_as_cloud_event)
+    await process_event(event_update_v2)
     # Check that the report was patched in ER
     assert mock_erclient_class.return_value.__aenter__.called
-    assert mock_erclient_class.return_value.patch_report.called
+    mock_patch_report = mock_erclient_class.return_value.patch_report
+    assert mock_patch_report.called
+    # Check the payload sent to ER
+    patch_report_data = mock_patch_report.call_args.kwargs["data"]
+    patch_report_id = mock_patch_report.call_args.kwargs["event_id"]
+    cloud_event_data = event_update_v2.data["message"]["data"]
+    decoded_system_event = json.loads(base64.b64decode(cloud_event_data))
+    event_v2_data = decoded_system_event.get("payload")
+    assert patch_report_id == dispatched_event_trace.external_id
+    assert patch_report_data == event_v2_data.get("changes")
 
 
 
