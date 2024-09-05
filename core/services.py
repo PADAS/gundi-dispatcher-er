@@ -243,18 +243,26 @@ async def process_transformer_event_v2(raw_event, attributes):
         current_span.set_attribute("service", "er-dispatcher")
         logger.debug(f"Message received: \npayload: {raw_event} \nattributes: {attributes}")
         if schema_version := raw_event.get("schema_version") != "v1":
-            logger.warning(f"Schema version '{schema_version}' not supported. Message discarded.")
-            return
+            error_message = f"Schema version '{schema_version}' not supported. Message discarded."
+            logger.error(error_message)
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
+            return {}
         event_type = raw_event.get("event_type")
         try:
             handler = event_handlers[event_type]
         except KeyError:
-            logger.warning(f"Event of type '{event_type}' unknown. Ignored.")
-            return
+            error_message = f"Event of type '{event_type}' unknown. Ignored."
+            logger.error(error_message)
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
+            return {}
         try:
             schema = event_schemas[event_type]
         except KeyError:
-            logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
+            error_message = f"Event Schema for '{event_type}' not found. Message discarded."
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
             return {}
         parsed_event = schema.parse_obj(raw_event)
         return await handler(event=parsed_event, attributes=attributes)
