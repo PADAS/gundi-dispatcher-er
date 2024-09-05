@@ -285,6 +285,7 @@ def is_too_old(timestamp):
 async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
     json_data = request.get_json()
+    headers = request.headers
     pubsub_message = json_data["message"]
     transformed_observation, attributes = extract_fields_from_message(pubsub_message)
     # Load tracing context
@@ -300,7 +301,8 @@ async def process_request(request):
             f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, Gundi Event ID: {gundi_event_id}): {pubsub_message}")
         # ToDo Check duplicates using message_id / gundi_event_id
         # Handle retries
-        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
+        # Check headers for backward compatibility with cloud events format
+        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time") or headers.get("ce-time")
         if is_too_old(timestamp):
             logger.warning(f"Event is too old (timestamp = {timestamp}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
