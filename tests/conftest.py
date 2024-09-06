@@ -1,15 +1,10 @@
 import datetime
 import json
-
-import aiohttp
-import functions_framework
 import httpx
 import pytest
 import asyncio
-from aiohttp.client_reqrep import ConnectionKey
 from erclient import ERClientServiceUnavailable
 from gundi_core.schemas import OutboundConfiguration
-from functions_framework.event_conversion import CloudEvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
 from gundi_core import events as system_events
@@ -233,6 +228,7 @@ def mock_erclient_class(
         mocker,
         post_sensor_observation_response,
         post_report_response,
+        patch_report_reponse,
         post_report_attachment_response,
         post_camera_trap_report_response,
         er_client_close_response
@@ -707,7 +703,7 @@ def destination_integration_v2():
 
 
 @pytest.fixture
-def event_v2_as_request(mocker):
+def event_v2_as_pubsub_request(mocker):
     mock_request = mocker.MagicMock()
     mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
     publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -729,7 +725,7 @@ def event_v2_as_request(mocker):
             },
             "messageId": "11937923011474843",
             "message_id": "11937923011474843",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "orderingKey": "",
             "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
@@ -741,7 +737,77 @@ def event_v2_as_request(mocker):
 
 
 @pytest.fixture
-def event_update_v2_as_request(mocker, dispatched_event_trace):
+def event_v2_with_state_as_pubsub_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJzdGF0ZSI6ICJhY3RpdmUifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "awt_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "ev",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
+            },
+            "messageId": "11937923011474843",
+            "message_id": "11937923011474843",
+            "orderingKey": "",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
+
+@pytest.fixture
+def event_v2_as_eventarc_request(mocker):
+    mock_request = mocker.MagicMock()
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    mock_request.headers = {
+        "Content-Type": "application/json",
+        "ce-id": "123451234512345",
+        "ce-specversion": "1.0",
+        "ce-time": publish_time,
+        "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
+        "ce-source": "//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC"
+    }
+    json_data = {
+        'message': {
+            'data': 'eyJldmVudF9pZCI6ICI4NzdmNmQ1Ni05ZDAyLTQzODctODI2ZS0xZTc3ZWMyZjg5YjYiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjMgMTk6NTQ6MDAuNjU5OTYzKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7InRpdGxlIjogIkFuaW1hbCBEZXRlY3RlZCBUZXN0IEV2ZW50IiwgImV2ZW50X3R5cGUiOiAid2lsZGxpZmVfc2lnaHRpbmdfcmVwIiwgInRpbWUiOiAiMjAyNC0wNy0wNCAxODowOToxMiswMDowMCIsICJsb2NhdGlvbiI6IHsibG9uZ2l0dWRlIjogMTMuNzgzMDY0LCAibGF0aXR1ZGUiOiAxMy42ODg2MzV9LCAiZXZlbnRfZGV0YWlscyI6IHsic3BlY2llcyI6ICJsaW9uIn0sICJzdGF0ZSI6ICJhY3RpdmUifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRUcmFuc2Zvcm1lZEVSIn0=',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "awt_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "ev",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "Xyz123",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
+            }
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
+
+@pytest.fixture
+def event_update_v2_as_pubsub_request(mocker, dispatched_event_trace):
     mock_request = mocker.MagicMock()
     mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
     publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -763,6 +829,76 @@ def event_update_v2_as_request(mocker, dispatched_event_trace):
             },
             "messageId": "11937923011474843",
             "message_id": "11937923011474843",
+            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
+
+@pytest.fixture
+def event_update_v2_as_eventarc_event(mocker, dispatched_event_trace):
+    mock_request = mocker.MagicMock()
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    mock_request.headers = {
+        "Content-Type": "application/json",
+        "ce-id": "123451234512345",
+        "ce-specversion": "1.0",
+        "ce-time": publish_time,
+        "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
+        "ce-source": "//pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC"
+    }
+    json_data = {
+        'message': {
+            "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7ImV2ZW50X3R5cGUiOiJsaW9uX3NpZ2h0aW5nX3JlcCIsICJldmVudF9kZXRhaWxzIjogeyJzcGVjaWVzIjogIkxpb24iLCAicXVhbnRpdHkiOiAxfX19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+            "attributes": {
+                "gundi_version": "v2",
+                "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                "gundi_id": str(dispatched_event_trace.object_id),
+                "related_to": "None",
+                "stream_type": "evu",
+                "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                "external_source_id": "camera123",
+                "destination_id": str(dispatched_event_trace.destination),
+                "data_provider_id": str(dispatched_event_trace.data_provider),
+                "annotations": "{}",
+                "tracing_context": "{}"
+            }
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
+
+@pytest.fixture
+def event_update_v2_with_state_as_pubsub_request(mocker, dispatched_event_trace):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            "data": "eyJldmVudF9pZCI6ICI2MzIyNjI2YS01YzQxLTQ4NmItOWE4YS04ZWZmODhhMDEyMjEiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMTI6MDE6MDQuOTcxMjQwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7ImNoYW5nZXMiOiB7InN0YXRlIjogInJlc29sdmVkIn19LCAiZXZlbnRfdHlwZSI6ICJFdmVudFVwZGF0ZVRyYW5zZm9ybWVkRVIifQ==",
+            "attributes": {
+                "gundi_version": "v2",
+                "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+                "gundi_id": str(dispatched_event_trace.object_id),
+                "related_to": "None",
+                "stream_type": "evu",
+                "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+                "external_source_id": "camera123",
+                "destination_id": str(dispatched_event_trace.destination),
+                "data_provider_id": str(dispatched_event_trace.data_provider),
+                "annotations": "{}",
+                "tracing_context": "{}"
+            },
+            "messageId": "11937923011474850",
+            "message_id": "11937923011474850",
             "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
             "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
@@ -797,7 +933,7 @@ def event_v2_with_provider_key_as_request(mocker):
             },
             "messageId": "11937923011474844",
             "message_id": "11937923011474844",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "orderingKey": "",
             "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
@@ -831,7 +967,7 @@ def observation_v2_with_provider_key_as_request(mocker):
             },
             "messageId": "11937923011474845",
             "message_id": "11937923011474845",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "orderingKey": "",
             "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
@@ -865,7 +1001,7 @@ def observation_v2_as_request(mocker):
             },
             "messageId": "11937923011474846",
             "message_id": "11937923011474846",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "orderingKey": "",
             "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
@@ -899,7 +1035,7 @@ def attachment_v2_as_request(mocker):
             },
             "messageId": "11937923011474847",
             "message_id": "11937923011474847",
-            "orderingKey": "b9ddcc3e-851a-4ec8-a1f4-4da1a5644ffb",
+            "orderingKey": "",
             "publishTime":  f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
