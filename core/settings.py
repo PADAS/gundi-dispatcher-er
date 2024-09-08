@@ -1,3 +1,6 @@
+import logging.config
+import sys
+
 from cdip_connector.core import cdip_settings
 from environs import Env
 
@@ -5,6 +8,25 @@ env = Env()
 env.read_env()
 
 LOGGING_LEVEL = env.str("LOGGING_LEVEL", "INFO")
+
+DEFAULT_LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "level": LOGGING_LEVEL,
+            "class": "logging.StreamHandler",
+            "stream": sys.stdout,
+        },
+    },
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": LOGGING_LEVEL,
+        },
+    },
+}
+logging.config.dictConfig(DEFAULT_LOGGING)
 
 DEFAULT_REQUESTS_TIMEOUT = (10, 20)  # Connect, Read
 

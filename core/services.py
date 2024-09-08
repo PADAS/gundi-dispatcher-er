@@ -243,27 +243,34 @@ async def process_transformer_event_v2(raw_event, attributes):
         current_span.set_attribute("service", "er-dispatcher")
         logger.debug(f"Message received: \npayload: {raw_event} \nattributes: {attributes}")
         if schema_version := raw_event.get("schema_version") != "v1":
-            logger.warning(f"Schema version '{schema_version}' not supported. Message discarded.")
-            return
+            error_message = f"Schema version '{schema_version}' not supported. Message discarded."
+            logger.error(error_message)
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
+            return {}
         event_type = raw_event.get("event_type")
         try:
             handler = event_handlers[event_type]
         except KeyError:
-            logger.warning(f"Event of type '{event_type}' unknown. Ignored.")
-            return
+            error_message = f"Event of type '{event_type}' unknown. Ignored."
+            logger.error(error_message)
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
+            return {}
         try:
             schema = event_schemas[event_type]
         except KeyError:
-            logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
+            error_message = f"Event Schema for '{event_type}' not found. Message discarded."
+            current_span.set_attribute("error", error_message)
+            await send_observation_to_dead_letter_topic(raw_event, attributes)
             return {}
         parsed_event = schema.parse_obj(raw_event)
         return await handler(event=parsed_event, attributes=attributes)
 
 
-def is_event_too_old(event):
-    logger.debug(f"event attributes: {event._attributes}")
-    timestamp = event._attributes.get("time")
+def is_too_old(timestamp):
     if not timestamp:
+        logger.warning("No timestamp found in Pubsub Message. Skipping age check.")
         return False
     try:  # The timestamp does not always include the microseconds part
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -271,23 +278,33 @@ def is_event_too_old(event):
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
     event_time = event_time.replace(tzinfo=timezone.utc)
     current_time = datetime.now(timezone.utc)
-    # Notice: We have seen cloud events with future timestamps. Don't use .seconds
     event_age_seconds = (current_time - event_time).total_seconds()
-    # Ignore events that are too old
     return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
 
 
-async def process_event(event):
+async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
-    transformed_observation, attributes = extract_fields_from_message(event.data["message"])
+    json_data = request.get_json()
+    headers = request.headers
+    pubsub_message = json_data["message"]
+    transformed_observation, attributes = extract_fields_from_message(pubsub_message)
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.process_event", kind=SpanKind.CLIENT
     ) as current_span:
+        pubsub_message_id = pubsub_message.get("message_id")
+        gundi_event_id = transformed_observation.get("event_id")
+        current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
+        current_span.set_attribute("gundi_event_id", str(gundi_event_id))
+        logger.debug(
+            f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, Gundi Event ID: {gundi_event_id}): {pubsub_message}")
+        # ToDo Check duplicates using message_id / gundi_event_id
         # Handle retries
-        if is_event_too_old(event):
-            logger.warning(f"Event is too old (timestamp = {event._attributes.get('time')}) and will be sent to dead-letter.")
+        # Check headers for backward compatibility with cloud events format
+        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time") or headers.get("ce-time")
+        if is_too_old(timestamp):
+            logger.warning(f"Event is too old (timestamp = {timestamp}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             return  # Skip the event
