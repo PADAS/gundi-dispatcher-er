@@ -695,9 +695,7 @@ def destination_integration_v2():
                          'value': 'pull_positions'}, 'data': {'endpoint': 'api/v1/positions'}}],
          'additional': {'topic': 'destination-v2-338225f3-91f9-4fe1-b013-353a229ce504-dev', 'broker': 'gcp_pubsub'},
          'default_route': {'id': '38dd8ec2-b3ee-4c31-940e-b6cc9c1f4326', 'name': 'Mukutan - Load Testing'},
-         'status': {'id': 'mockid-b16a-4dbd-ad32-197c58aeef59', 'is_healthy': True,
-                    'details': 'Last observation has been delivered with success.',
-                    'observation_delivered_24hrs': 50231, 'last_observation_delivered_at': '2023-03-31T11:20:00+0200'}
+         'status': 'healthy'
          }
     )
 
