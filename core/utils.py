@@ -14,6 +14,7 @@ from gundi_core.schemas import v2 as gundi_schemas_v2
 from gundi_core.events import SystemEventBaseModel
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
+from pydantic import ValidationError
 from redis import exceptions as redis_exceptions
 from gcloud.aio import pubsub
 from . import settings
@@ -255,16 +256,19 @@ async def get_integration_details(integration_id: str) -> gundi_schemas.v2.Integ
     cached = read_config_from_cache_safe(cache_key=cache_key, extra_dict=extra_dict)
 
     if cached:
-        config = gundi_schemas.v2.Integration.parse_raw(cached)
-        logger.debug(
-            "Using cached integration details",
-            extra={
-                **extra_dict,
-                ExtraKeys.AttentionNeeded: False,
-                "integration_detail": config,
-            },
-        )
-        return config
+        try:
+            config = gundi_schemas.v2.Integration.parse_raw(cached)
+            logger.debug(
+                "Using cached integration details",
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: False,
+                    "integration_detail": config,
+                },
+            )
+            return config
+        except ValidationError as e:
+            pass  # Schema may have changed, rebuild from the portal
 
     # Retrieve details from the portal
     logger.debug(f"Cache miss for integration details.", extra={**extra_dict})
