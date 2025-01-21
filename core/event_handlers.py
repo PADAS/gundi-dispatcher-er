@@ -123,7 +123,8 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 }
                 result = await dispatcher.send(observation, **kwargs)
             except Exception as e:
-                error_msg = f"Exception occurred dispatching observation {gundi_id}: {e}"
+                error = f"{type(e).__name__}:{e}"
+                error_msg = f"Exception occurred dispatching observation {gundi_id}: {error}"
                 logger.exception(
                     error_msg,
                     extra={
@@ -137,7 +138,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                     await publish_event(
                         event=system_events.ObservationUpdateFailed(
                             payload=UpdateErrorDetails(
-                                error=str(e),
+                                error=error,
                                 error_traceback=traceback.format_exc(),
                                 server_response_status=getattr(e, "status_code", None),
                                 server_response_body=getattr(e, "response_body", ""),
@@ -156,7 +157,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                     await publish_event(
                         event=system_events.ObservationDeliveryFailed(
                             payload=DeliveryErrorDetails(
-                                error=str(e),
+                                error=error,
                                 error_traceback=traceback.format_exc(),
                                 server_response_status=getattr(e, "status_code", None),
                                 server_response_body=getattr(e, "response_body", ""),
