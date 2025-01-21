@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
+from gundi_core.events import UpdateErrorDetails, DeliveryErrorDetails
 from gundi_core.events.transformers import (
     EventTransformedER,
     EventUpdateTransformedER,
@@ -134,12 +135,19 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 if stream_type == schemas.v2.StreamPrefixEnum.event_update.value:
                     await publish_event(
                         event=system_events.ObservationUpdateFailed(
-                            payload=gundi_schemas_v2.UpdatedObservation(
-                                gundi_id=gundi_id,
-                                related_to=related_to,
-                                data_provider_id=data_provider_id,
-                                destination_id=destination_id,
-                                updated_at=datetime.now(timezone.utc)  # UTC
+                            schema_version="v2",
+                            payload=UpdateErrorDetails(
+                                error=str(e),
+                                error_traceback=e, # ToDo: get traceback as a string
+                                server_response_status=getattr(e, "status_code", None),
+                                server_response_body=getattr(e, "response_body", ""),
+                                observation=gundi_schemas_v2.UpdatedObservation(
+                                    gundi_id=gundi_id,
+                                    related_to=related_to,
+                                    data_provider_id=data_provider_id,
+                                    destination_id=destination_id,
+                                    updated_at=datetime.now(timezone.utc)  # UTC
+                                )
                             )
                         ),
                         topic_name=settings.DISPATCHER_EVENTS_TOPIC
@@ -147,13 +155,20 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 else:
                     await publish_event(
                         event=system_events.ObservationDeliveryFailed(
-                            payload=gundi_schemas_v2.DispatchedObservation(
-                                gundi_id=gundi_id,
-                                related_to=related_to,
-                                external_id=None,  # ID returned by the destination system
-                                data_provider_id=data_provider_id,
-                                destination_id=destination_id,
-                                delivered_at=datetime.now(timezone.utc)  # UTC
+                            schema_version="v2",
+                            payload=DeliveryErrorDetails(
+                                error=str(e),
+                                error_traceback=e, # ToDo: get traceback as a string
+                                server_response_status=getattr(e, "status_code", None),
+                                server_response_body=getattr(e, "response_body", ""),
+                                observation=gundi_schemas_v2.DispatchedObservation(
+                                    gundi_id=gundi_id,
+                                    related_to=related_to,
+                                    external_id=None,  # ID returned by the destination system
+                                    data_provider_id=data_provider_id,
+                                    destination_id=destination_id,
+                                    delivered_at=datetime.now(timezone.utc)  # UTC
+                                )
                             )
                         ),
                         topic_name=settings.DISPATCHER_EVENTS_TOPIC
