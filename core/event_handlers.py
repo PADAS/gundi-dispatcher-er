@@ -135,7 +135,6 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 if stream_type == schemas.v2.StreamPrefixEnum.event_update.value:
                     await publish_event(
                         event=system_events.ObservationUpdateFailed(
-                            schema_version="v2",
                             payload=UpdateErrorDetails(
                                 error=str(e),
                                 error_traceback=e, # ToDo: get traceback as a string
@@ -155,7 +154,6 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 else:
                     await publish_event(
                         event=system_events.ObservationDeliveryFailed(
-                            schema_version="v2",
                             payload=DeliveryErrorDetails(
                                 error=str(e),
                                 error_traceback=e, # ToDo: get traceback as a string
