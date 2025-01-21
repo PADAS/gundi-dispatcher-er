@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 import asyncio
-from erclient import ERClientServiceUnavailable
+from erclient import ERClientServiceUnreachable
 from gundi_core.schemas import OutboundConfiguration
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
@@ -270,7 +270,7 @@ def mock_erclient_class_with_service_unavailable_error(
 ):
     mocked_erclient_class = mocker.MagicMock()
     erclient_mock = mocker.MagicMock()
-    error = ERClientServiceUnavailable('ER service unavailable')
+    error = ERClientServiceUnreachable('ER service unavailable')
     erclient_mock.post_sensor_observation.side_effect = error
     erclient_mock.post_report.side_effect = error
     erclient_mock.post_report_attachment.side_effect = error

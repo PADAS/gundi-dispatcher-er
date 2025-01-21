@@ -265,12 +265,12 @@ async def test_raise_exception_on_internal_exception(
         mock_cache_empty,
         mock_erclient_class,
         mock_pubsub_client,
-        mock_gundi_client_v2_with_internal_exception,
+        mock_gundi_client_v2_class_with_internal_exception,
         event_v2_as_pubsub_request,
 ):
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
-    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_with_internal_exception)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class_with_internal_exception)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
 

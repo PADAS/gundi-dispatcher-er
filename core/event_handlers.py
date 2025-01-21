@@ -123,7 +123,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 }
                 result = await dispatcher.send(observation, **kwargs)
             except Exception as e:
-                error = f"{type(e).__name__}:{e}"
+                error = f"{type(e).__name__}: {e}"
                 error_msg = f"Exception occurred dispatching observation {gundi_id}: {error}"
                 logger.exception(
                     error_msg,
