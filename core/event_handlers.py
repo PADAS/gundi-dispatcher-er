@@ -1,4 +1,5 @@
 import logging
+import traceback
 from datetime import datetime, timezone
 
 from gundi_core.events import UpdateErrorDetails, DeliveryErrorDetails
@@ -137,7 +138,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                         event=system_events.ObservationUpdateFailed(
                             payload=UpdateErrorDetails(
                                 error=str(e),
-                                error_traceback=e, # ToDo: get traceback as a string
+                                error_traceback=traceback.format_exc(),
                                 server_response_status=getattr(e, "status_code", None),
                                 server_response_body=getattr(e, "response_body", ""),
                                 observation=gundi_schemas_v2.UpdatedObservation(
@@ -156,7 +157,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                         event=system_events.ObservationDeliveryFailed(
                             payload=DeliveryErrorDetails(
                                 error=str(e),
-                                error_traceback=e, # ToDo: get traceback as a string
+                                error_traceback=traceback.format_exc(),
                                 server_response_status=getattr(e, "status_code", None),
                                 server_response_body=getattr(e, "response_body", ""),
                                 observation=gundi_schemas_v2.DispatchedObservation(
