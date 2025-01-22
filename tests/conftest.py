@@ -3,8 +3,10 @@ import json
 import httpx
 import pytest
 import asyncio
-from erclient import ERClientServiceUnreachable
+from erclient import er_errors
+from gundi_core.events import EventTransformedER
 from gundi_core.schemas import OutboundConfiguration
+from gundi_core.schemas.v2 import EREvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
 from gundi_core import events as system_events
@@ -260,17 +262,98 @@ def mock_erclient_class(
 
 
 @pytest.fixture
-def mock_erclient_class_with_service_unavailable_error(
-        mocker,
-        post_sensor_observation_response,
-        post_report_response,
-        post_report_attachment_response,
-        post_camera_trap_report_response,
-        er_client_close_response
+def mock_er_missing_event_type_error():
+    # Typical response in skylight connections when the event type is missing in the ER site
+    return er_errors.ERClientBadRequest(
+        message=f"ER Bad Request ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=400,
+        response_body=json.dumps({
+            "data": [[{"event_type": {"event_type": "Value 'detection_alert_rep' does not exist."}}]],
+            "status": {"code": 400, "message": "Bad Request"}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_bad_credentials_error():
+    # Typical response in skylight connections when the event type is missing in the ER site
+    return er_errors.ERClientBadCredentials(
+        message=f"ER Unauthorized ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=401,
+        response_body=json.dumps({
+            "data": [],
+            "status": {"code": 401, "message": "Unauthorized", "detail": "Authentication credentials were not provided."}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_missing_permissions_error():
+    # Typical response when a token/user doesn't have permissions to create events in certain category
+    return er_errors.ERClientPermissionDenied(
+        message=f"ER Forbidden ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=403,
+        response_body=json.dumps({
+            "data": [],
+            "status": {"code": 403, "message": "Forbidden", "detail": "You do not have permission to perform this action."}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_service_internal_error():
+    return er_errors.ERClientInternalError(
+        message=f"ER Internal Error ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=500,
+        response_body="<html><body><p>Internal Error</p></body></html>"
+    )
+
+@pytest.fixture
+def mock_er_service_unreachable_502_error():
+    return er_errors.ERClientServiceUnreachable(
+        message=f"ER Gateway Timeout ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=502,
+        response_body="<html><body><p>The backend service took too long to respond</p></body></html>"
+    )
+
+@pytest.fixture
+def mock_er_service_unreachable_503_error():
+    return er_errors.ERClientServiceUnreachable(
+        message=f"ER Service Unavailable ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=503,
+        response_body="<html><body><p>Service Unavailable</p></body></html>"
+    )
+
+
+@pytest.fixture
+def mock_erclient_class_with_error(
+        mocker, request, er_client_close_response,
+        mock_er_missing_event_type_error,
+        mock_er_bad_credentials_error,
+        mock_er_missing_permissions_error,
+        mock_er_service_internal_error,
+        mock_er_service_unreachable_502_error,
+        mock_er_service_unreachable_503_error
 ):
+    """
+    Helper function to create a mocked erclient class that will raise a specific error.
+    """
+    if request.param == "missing_event_type":
+        error = mock_er_missing_event_type_error
+    elif request.param == "bad_credentials":
+        error = mock_er_bad_credentials_error
+    elif request.param == "missing_permissions":
+        error = mock_er_missing_permissions_error
+    elif request.param == "service_internal_error":
+        error = mock_er_service_internal_error
+    elif request.param == "service_unreachable_502":
+        error = mock_er_service_unreachable_502_error
+    elif request.param == "service_unreachable_503":
+        error = mock_er_service_unreachable_503_error
+    else:
+        error = er_errors.ERClientException(f"ER Error: {request.param}")
     mocked_erclient_class = mocker.MagicMock()
     erclient_mock = mocker.MagicMock()
-    error = ERClientServiceUnreachable('ER service unavailable')
     erclient_mock.post_sensor_observation.side_effect = error
     erclient_mock.post_report.side_effect = error
     erclient_mock.post_report_attachment.side_effect = error
@@ -1042,6 +1125,25 @@ def attachment_v2_as_request(mocker):
     mock_request.data = json.dumps(json_data)
     mock_request.get_json.return_value = json_data
     return mock_request
+
+
+@pytest.fixture
+def event_v2_transformed_er():
+    return EventTransformedER.parse_obj(
+        {
+            "event_id": "ae7f61df-2b85-4703-95db-2ae2424c0df6",
+            "timestamp": "2024-07-24 14:50:50.065654+00:00",
+            "schema_version": "v1",
+            "payload": {
+                "title": "Animal Detected Test Event",
+                "event_type": "lion_sighting",
+                "time": "2025-01-22 14:18:12+00:00",
+                "location": {"longitude": 13.783065, "latitude": 13.688635},
+                "event_details": {"species": "Lion"}
+            },
+            "event_type": "EventTransformedER"
+        }
+    )
 
 
 @pytest.fixture
