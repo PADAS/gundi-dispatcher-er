@@ -2,6 +2,7 @@ import base64
 import json
 from unittest.mock import ANY, call
 import pytest
+from erclient import er_errors
 
 from gundi_core import schemas
 from core import settings
@@ -180,12 +181,24 @@ async def test_system_event_is_published_on_successful_delivery(
     )
 
 
+@pytest.mark.parametrize(
+    "mock_erclient_class_with_error,er_error",
+    [
+        ("missing_event_type", er_errors.ERClientBadRequest),
+        ("bad_credentials", er_errors.ERClientBadCredentials),
+        ("missing_permissions", er_errors.ERClientPermissionDenied),
+        ("service_internal_error", er_errors.ERClientInternalError),
+        ("service_unreachable_502", er_errors.ERClientServiceUnreachable),
+        ("service_unreachable_503", er_errors.ERClientServiceUnreachable),
+    ],
+    indirect=["mock_erclient_class_with_error"])
 @pytest.mark.asyncio
 async def test_system_event_is_published_on_delivery_failure(
     mocker,
     mock_cache_empty,
     mock_gundi_client,
-    mock_erclient_class_with_service_unavailable_error,
+    mock_erclient_class_with_error,
+    er_error,
     mock_pubsub_client_with_observation_delivery_failure,
     mock_gundi_client_v2_class,
     event_v2_as_pubsub_request,
@@ -194,14 +207,14 @@ async def test_system_event_is_published_on_delivery_failure(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class_with_service_unavailable_error)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class_with_error)
     mocker.patch("core.utils.pubsub", mock_pubsub_client_with_observation_delivery_failure)
     # Check that the dispatcher raises an exception so the message is retried later
     with pytest.raises(DispatcherException):
         await process_request(event_v2_as_pubsub_request)
     # Check that the call to send the report to ER was made
-    assert mock_erclient_class_with_service_unavailable_error.return_value.__aenter__.called
-    assert mock_erclient_class_with_service_unavailable_error.return_value.post_report.called
+    assert mock_erclient_class_with_error.return_value.__aenter__.called
+    assert mock_erclient_class_with_error.return_value.post_report.called
     # Check that an event was published to the right pubsub topic to inform other services about the error
     assert mock_pubsub_client_with_observation_delivery_failure.PublisherClient.called
     assert mock_pubsub_client_with_observation_delivery_failure.PubsubMessage.called
