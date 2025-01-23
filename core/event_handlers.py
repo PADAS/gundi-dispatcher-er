@@ -85,14 +85,29 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
         else:
             related_observation = None
 
-        # If it's an update, get the external id
+        # If it's an update, get the external id (ER Event uuid)
         if stream_type == schemas.v2.StreamPrefixEnum.event_update:
             dispatched_observation = await get_dispatched_observation(gundi_id=gundi_id, destination_id=destination_id)
-            if not dispatched_observation:
+            if not dispatched_observation or not dispatched_observation.external_id:
                 error_msg = f"Event {gundi_id} wasn't delivered yet. Will retry later.",
                 logger.warning(
                     error_msg,
                     extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
+                )
+                await publish_event(
+                    event=system_events.ObservationUpdateFailed(
+                        payload=UpdateErrorDetails(
+                            error=error_msg,
+                            observation=gundi_schemas_v2.UpdatedObservation(
+                                gundi_id=gundi_id,
+                                related_to=related_to,
+                                data_provider_id=data_provider_id,
+                                destination_id=destination_id,
+                                updated_at=datetime.now(timezone.utc)  # UTC
+                            )
+                        )
+                    ),
+                    topic_name=settings.DISPATCHER_EVENTS_TOPIC
                 )
                 raise ReferenceDataError(error_msg)
             external_id = str(dispatched_observation.external_id)
@@ -119,7 +134,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 )
                 kwargs = {
                     "external_id": external_id,  # Used in updates
-                    "related_observation": related_observation
+                    "related_observation": related_observation  # Used in attachments
                 }
                 result = await dispatcher.send(observation, **kwargs)
             except Exception as e:
