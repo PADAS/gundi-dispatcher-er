@@ -5,6 +5,7 @@ on:
     branches:
         - main
         - 'release-**'
+        - gundi-3559-improve-error-events
   pull_request:
     types: [labeled, opened, synchronize, reopened]
 
@@ -49,7 +50,7 @@ jobs:
 
   upload_dev:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
-    if: startsWith(github.ref, 'refs/heads/main')
+    if: startsWith(github.ref, 'refs/heads/gundi-3559-improve-error-events')
     needs: [vars, zip, run_unit_tests]
     with:
       environment: dev
