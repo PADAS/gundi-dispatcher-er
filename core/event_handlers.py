@@ -89,7 +89,7 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
         if stream_type == schemas.v2.StreamPrefixEnum.event_update:
             dispatched_observation = await get_dispatched_observation(gundi_id=gundi_id, destination_id=destination_id)
             if not dispatched_observation or not dispatched_observation.external_id:
-                error_msg = f"Event {gundi_id} wasn't delivered yet. Will retry later.",
+                error_msg = f"Event {gundi_id} wasn't delivered yet. Will retry later."
                 logger.warning(
                     error_msg,
                     extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
