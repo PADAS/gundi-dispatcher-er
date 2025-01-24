@@ -1,10 +1,15 @@
 import datetime
 import json
+from unittest.mock import MagicMock
+
 import httpx
 import pytest
 import asyncio
-from erclient import ERClientServiceUnavailable
+from erclient import er_errors
+from gundi_core.events import EventTransformedER, ObservationTransformedER, AttachmentTransformedER, \
+    EventUpdateTransformedER
 from gundi_core.schemas import OutboundConfiguration
+from gundi_core.schemas.v2 import EREvent
 from redis import exceptions as redis_exceptions
 import gundi_core.schemas.v2 as schemas_v2
 from gundi_core import events as system_events
@@ -16,6 +21,11 @@ def async_return(result):
     f = asyncio.Future()
     f.set_result(result)
     return f
+
+
+class AsyncMock(MagicMock):
+    async def __call__(self, *args, **kwargs):
+        return super(AsyncMock, self).__call__(*args, **kwargs)
 
 
 @pytest.fixture
@@ -260,19 +270,105 @@ def mock_erclient_class(
 
 
 @pytest.fixture
-def mock_erclient_class_with_service_unavailable_error(
-        mocker,
-        post_sensor_observation_response,
-        post_report_response,
-        post_report_attachment_response,
-        post_camera_trap_report_response,
-        er_client_close_response
+def mock_er_missing_event_type_error():
+    # Typical response in skylight connections when the event type is missing in the ER site
+    return er_errors.ERClientBadRequest(
+        message=f"ER Bad Request ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=400,
+        response_body=json.dumps({
+            "data": [[{"event_type": {"event_type": "Value 'detection_alert_rep' does not exist."}}]],
+            "status": {"code": 400, "message": "Bad Request"}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_bad_credentials_error():
+    # Typical response in skylight connections when the event type is missing in the ER site
+    return er_errors.ERClientBadCredentials(
+        message=f"ER Unauthorized ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=401,
+        response_body=json.dumps({
+            "data": [],
+            "status": {"code": 401, "message": "Unauthorized",
+                       "detail": "Authentication credentials were not provided."}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_missing_permissions_error():
+    # Typical response when a token/user doesn't have permissions to create events in certain category
+    return er_errors.ERClientPermissionDenied(
+        message=f"ER Forbidden ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=403,
+        response_body=json.dumps({
+            "data": [],
+            "status": {"code": 403, "message": "Forbidden",
+                       "detail": "You do not have permission to perform this action."}
+        })
+    )
+
+
+@pytest.fixture
+def mock_er_service_internal_error():
+    return er_errors.ERClientInternalError(
+        message=f"ER Internal Error ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=500,
+        response_body="<html><body><p>Internal Error</p></body></html>"
+    )
+
+
+@pytest.fixture
+def mock_er_service_unreachable_502_error():
+    return er_errors.ERClientServiceUnreachable(
+        message=f"ER Gateway Timeout ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=502,
+        response_body="<html><body><p>The backend service took too long to respond</p></body></html>"
+    )
+
+
+@pytest.fixture
+def mock_er_service_unreachable_503_error():
+    return er_errors.ERClientServiceUnreachable(
+        message=f"ER Service Unavailable ON POST https://fake-site.pamdas.org/api/v1.0/sensors/generic/1234/status",
+        status_code=503,
+        response_body="<html><body><p>Service Unavailable</p></body></html>"
+    )
+
+
+@pytest.fixture
+def mock_erclient_class_with_error(
+        mocker, request, er_client_close_response,
+        mock_er_missing_event_type_error,
+        mock_er_bad_credentials_error,
+        mock_er_missing_permissions_error,
+        mock_er_service_internal_error,
+        mock_er_service_unreachable_502_error,
+        mock_er_service_unreachable_503_error
 ):
+    """
+    Helper function to create a mocked erclient class that will raise a specific error.
+    """
+    if request.param == "missing_event_type":
+        error = mock_er_missing_event_type_error
+    elif request.param == "bad_credentials":
+        error = mock_er_bad_credentials_error
+    elif request.param == "missing_permissions":
+        error = mock_er_missing_permissions_error
+    elif request.param == "service_internal_error":
+        error = mock_er_service_internal_error
+    elif request.param == "service_unreachable_502":
+        error = mock_er_service_unreachable_502_error
+    elif request.param == "service_unreachable_503":
+        error = mock_er_service_unreachable_503_error
+    else:
+        error = er_errors.ERClientException(f"ER Error: {request.param}")
     mocked_erclient_class = mocker.MagicMock()
     erclient_mock = mocker.MagicMock()
-    error = ERClientServiceUnavailable('ER service unavailable')
     erclient_mock.post_sensor_observation.side_effect = error
     erclient_mock.post_report.side_effect = error
+    erclient_mock.patch_report.side_effect = error
     erclient_mock.post_report_attachment.side_effect = error
     erclient_mock.post_camera_trap_report.side_effect = error
     erclient_mock.close.side_effect = error
@@ -280,6 +376,11 @@ def mock_erclient_class_with_service_unavailable_error(
     erclient_mock.__aexit__.return_value = er_client_close_response
     mocked_erclient_class.return_value = erclient_mock
     return mocked_erclient_class
+
+
+@pytest.fixture
+def mock_publish_event(mocker):
+    return mocker.AsyncMock()
 
 
 @pytest.fixture
@@ -619,7 +720,6 @@ def cameratrap_event_as_request(mocker):
     mock_request.data = json.dumps(json_data)
     mock_request.get_json.return_value = json_data
     return mock_request
-
 
 
 @pytest.fixture
@@ -966,7 +1066,7 @@ def observation_v2_with_provider_key_as_request(mocker):
             "messageId": "11937923011474845",
             "message_id": "11937923011474845",
             "orderingKey": "",
-            "publishTime":  f"{publish_time}",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -1000,7 +1100,7 @@ def observation_v2_as_request(mocker):
             "messageId": "11937923011474846",
             "message_id": "11937923011474846",
             "orderingKey": "",
-            "publishTime":  f"{publish_time}",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -1034,7 +1134,7 @@ def attachment_v2_as_request(mocker):
             "messageId": "11937923011474847",
             "message_id": "11937923011474847",
             "orderingKey": "",
-            "publishTime":  f"{publish_time}",
+            "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"
         },
         'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
@@ -1042,6 +1142,96 @@ def attachment_v2_as_request(mocker):
     mock_request.data = json.dumps(json_data)
     mock_request.get_json.return_value = json_data
     return mock_request
+
+
+@pytest.fixture
+def event_v2_transformed_er():
+    return EventTransformedER.parse_obj(
+        {
+            "event_id": "ae7f61df-2b85-4703-95db-2ae2424c0df6",
+            "timestamp": "2024-07-24 14:50:50.065654+00:00",
+            "schema_version": "v1",
+            "payload": {
+                "title": "Animal Detected Test Event",
+                "event_type": "lion_sighting",
+                "time": "2025-01-22 14:18:12+00:00",
+                "location": {"longitude": 13.783065, "latitude": 13.688635},
+                "event_details": {"species": "Lion"}
+            },
+            "event_type": "EventTransformedER"
+        }
+    )
+
+
+@pytest.fixture
+def attachment_v2_transformed_er():
+    return AttachmentTransformedER.parse_obj(
+        {
+            "event_id": "963dbc56-7eea-4949-b34e-a1c05daacc4e",
+            "timestamp": "2025-01-22 14:18:12+00:00",
+            "schema_version": "v1",
+            "payload": {
+                "file_path": "attachments/9bedc03e-8415-46db-aa70-782490cdff31_wild_dog-male.svg"
+            },
+            "event_type": "AttachmentTransformedER"
+        }
+    )
+
+
+@pytest.fixture
+def event_update_v2_transformed_er():
+    return EventUpdateTransformedER.parse_obj(
+        {
+            "event_id": "6322626a-5c41-486b-9a8a-8eff88a01221",
+            "timestamp": "2024-07-24 12:01:04.971240+00:00",
+            "schema_version": "v1",
+            "payload": {
+                "changes": {
+                    "state": "resolved"
+                }
+            },
+            "event_type": "EventUpdateTransformedER"
+        }
+    )
+
+
+@pytest.fixture
+def observations_v2_transformed_er():
+    return ObservationTransformedER.parse_obj(
+        {
+            "event_id": "48bd073a-8e35-43cf-91c2-c7b4b87a26d7",
+            "timestamp": "2024-07-24 13:23:43.952056+00:00",
+            "schema_version": "v1",
+            "payload": {
+                "manufacturer_id": "test-device",
+                "source_type": "tracking-device",
+                "subject_name": "Mariano",
+                "subject_type": "mm-tracker",
+                "subject_subtype": "mm-tracker",
+                "recorded_at": "2024-07-22 11:51:05+00:00",
+                "location": {"lon": -72.704459, "lat": -51.688246},
+                "additional": {"speed_kmph": 30}
+            },
+            "event_type": "ObservationTransformedER"
+        }
+    )
+
+
+@pytest.fixture
+def event_v2_attributes():
+    return {
+        "gundi_version": "v2",
+        "provider_key": "gundi_traptagger_f870e228-4a65-40f0-888c-41bdc1124c3c",
+        "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+        "related_to": "None",
+        "stream_type": "ev",
+        "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+        "external_source_id": "Xyz123",
+        "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+        "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        "annotations": "{}",
+        "tracing_context": "{}"
+    }
 
 
 @pytest.fixture
