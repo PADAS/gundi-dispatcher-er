@@ -1,0 +1,51 @@
+name: Release Workflow
+
+on:
+  push:
+    branches:
+      - 'release-**'
+
+jobs:
+  common:
+    uses: ./.github/workflows/_common.yml
+
+  zip:
+    if: github.event_name != 'pull_request'
+    uses: PADAS/gundi-workflows/.github/workflows/zip_files.yml@main
+    needs: [common]
+    with:
+      input_files: "*"
+      output_file: ${{ needs.common.outputs.file_name }}
+
+
+  upload_stage:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    needs: [common, zip]
+    with:
+      environment: stage
+      file_name: ${{ needs.common.outputs.file_name }}
+
+  update_secret_stage: 
+    uses: PADAS/gundi-workflows/.github/workflows/update_json_secret_key.yml@main
+    needs: [common, upload_stage]
+    with: 
+      environment: stage
+      secret_name: "er-dispatcher-defaults-stage"
+      secret_key: "deployment_settings.source_code_path"
+      secret_value: ${{ needs.common.outputs.file_name }}
+
+  upload_prod:
+    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
+    needs: [common, zip, upload_stage, update_secret_stage]
+    with:
+      environment: prod
+      file_name: ${{ needs.common.outputs.file_name }}
+
+  update_secret_prod: 
+    uses: PADAS/gundi-workflows/.github/workflows/update_json_secret_key.yml@main
+    needs: [common, upload_prod]
+    with: 
+      environment: prod
+      secret_name: "er-dispatcher-defaults-prod"
+      secret_key: "deployment_settings.source_code_path"
+      secret_value: ${{ needs.common.outputs.file_name }}
