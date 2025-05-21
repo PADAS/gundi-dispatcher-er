@@ -32,7 +32,7 @@ jobs:
       environment: stage
       secret_name: "er-dispatcher-defaults-stage"
       secret_key: "deployment_settings.source_code_path"
-      secret_value: ${{ needs.common.outputs.file_name }}
+      secret_value: "${{ needs.common.outputs.file_name }}.zip"
 
   upload_prod:
     uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
@@ -48,4 +48,4 @@ jobs:
       environment: prod
       secret_name: "er-dispatcher-defaults-prod"
       secret_key: "deployment_settings.source_code_path"
-      secret_value: ${{ needs.common.outputs.file_name }}
+      secret_value: "${{ needs.common.outputs.file_name }}.zip"

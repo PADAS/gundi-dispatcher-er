@@ -33,4 +33,4 @@ jobs:
       environment: dev
       secret_name: "er-dispatcher-defaults-dev"
       secret_key: "deployment_settings.source_code_path"
-      secret_value: ${{ needs.common.outputs.file_name }}
+      secret_value: "${{ needs.common.outputs.file_name }}.zip"
