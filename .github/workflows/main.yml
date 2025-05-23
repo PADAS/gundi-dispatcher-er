@@ -3,34 +3,12 @@ name: Main Workflow
 on:
   push:
     branches:
-      - main
+      - pipeline-refactor
 
 jobs:
-  common:
-    uses: ./.github/workflows/_common.yml
-
-  zip:
-    if: github.event_name != 'pull_request'
-    uses: PADAS/gundi-workflows/.github/workflows/zip_files.yml@main
-    needs: [common]
+  main:
+    uses: PADAS/gundi-workflows/.github/workflows/pipeline-dispatcher-zip-main.yml@pipeline-dispatcher-artifact-based
+    secrets: inherit
     with:
-      input_files: "*"
-      output_file: ${{ needs.common.outputs.file_name }}
-
-  upload_dev:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    uses: PADAS/gundi-workflows/.github/workflows/upload_to_gcs.yml@main
-    needs: [common, zip]
-    with:
+      secret_name: "er-dispatcher-defaults"
       environment: dev
-      file_name: ${{ needs.common.outputs.file_name }}
-
-  update_secret_dev: 
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    uses: PADAS/gundi-workflows/.github/workflows/update_json_secret_key.yml@main
-    needs: [common, upload_dev]
-    with: 
-      environment: dev
-      secret_name: "er-dispatcher-defaults-dev"
-      secret_key: "deployment_settings.source_code_path"
-      secret_value: "${{ needs.common.outputs.file_name }}.zip"

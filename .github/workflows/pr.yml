@@ -5,5 +5,6 @@ on:
     types: [labeled, opened, synchronize, reopened]
 
 jobs:
-  common:
-    uses: ./.github/workflows/_common.yml
+  pr:
+    uses: PADAS/gundi-workflows/.github/workflows/pipeline-dispatcher-zip-pr.yml@pipeline-dispatcher-artifact-based
+    secrets: inherit
