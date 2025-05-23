@@ -7,7 +7,7 @@ on:
 
 jobs:
   main:
-    uses: PADAS/gundi-workflows/.github/workflows/pipeline-dispatcher-docker-zip.yml@pipeline-dispatcher-artifact-based
+    uses: PADAS/gundi-workflows/.github/workflows/pipeline-dispatcher-zip.yml@pipeline-dispatcher-artifact-based
     secrets: inherit
     with:
       secret_name: "er-dispatcher-defaults-dev"
