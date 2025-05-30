@@ -19,8 +19,8 @@ curl localhost:8080 \
         },
         "messageId": "11937923011474843",
         "message_id": "11937923011474843",
-        "publishTime": "2024-07-24T12:51:00.789Z",
-        "publish_time": "2024-07-24T12:51:00.789Z"
+        "publishTime": "2024-07-24T12:51:01.789Z",
+        "publish_time": "2024-07-24T12:51:01.789Z"
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }'
