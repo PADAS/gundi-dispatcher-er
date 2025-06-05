@@ -2,7 +2,7 @@
 Serverless dispatcher (CloudEvent Functions) to send observations to EarthRanger.
 
 
-Supported observation types: Positions, GeoEvents and  CameraTrap Events
+Supported observation types: Positions, Events, Event Updates, Attachments, and Text Messages
 
 ## Development
 ### Create python virtual environment with python 3.7+

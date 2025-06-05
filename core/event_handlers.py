@@ -7,7 +7,8 @@ from gundi_core.events.transformers import (
     EventTransformedER,
     EventUpdateTransformedER,
     AttachmentTransformedER,
-    ObservationTransformedER
+    ObservationTransformedER,
+    MessageTransformedER
 )
 from core import tracing, dispatchers, settings
 from core.errors import ReferenceDataError, DispatcherException
@@ -271,11 +272,20 @@ async def handle_er_observation(event: AttachmentTransformedER, attributes: dict
         return await dispatch_transformed_observation_v2(observation=event.payload, attributes=attributes)
 
 
+async def handle_er_message(event: MessageTransformedER, attributes: dict):
+    # Trace observations with Open Telemetry
+    with tracing.tracer.start_as_current_span(
+            "er_dispatcher.handle_er_message", kind=SpanKind.CONSUMER
+    ) as current_span:
+        current_span.set_attribute("payload", repr(event.payload))
+        return await dispatch_transformed_observation_v2(observation=event.payload, attributes=attributes)
+
 event_schemas = {
     "EventTransformedER": EventTransformedER,
     "EventUpdateTransformedER": EventUpdateTransformedER,
     "AttachmentTransformedER": AttachmentTransformedER,
     "ObservationTransformedER": ObservationTransformedER,
+    "MessageTransformedER": MessageTransformedER
 }
 
 event_handlers = {
@@ -283,4 +293,5 @@ event_handlers = {
     "EventUpdateTransformedER": handle_er_event_update,
     "AttachmentTransformedER": handle_er_attachment,
     "ObservationTransformedER": handle_er_observation,
+    "MessageTransformedER": handle_er_message
 }

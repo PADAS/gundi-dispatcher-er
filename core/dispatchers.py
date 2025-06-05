@@ -273,6 +273,20 @@ class ERObservationDispatcher(ERDispatcherV2):
                 raise ex
 
 
+class ERMessageDispatcher(ERDispatcherV2):
+
+    async def send(self, message: schemas.v2.ERMessage, **kwargs):
+        async with self.er_client as client:
+            try:
+                manufacturer_id = message.manufacturer_id
+                message.manufacturer_id = None  # Sent as query param
+                message_cleaned = json.loads(message.json(exclude_none=True, exclude_unset=True))
+                return await client.post_message(message=message_cleaned, params={"manufacturer_id": manufacturer_id})
+            except Exception as ex:
+                logger.exception(f"Error sending message to {client.service_root}: \n{type(ex)}: {ex}")
+                raise ex
+
+
 dispatcher_cls_by_type = {
     # Gundi v1
     schemas.StreamPrefixEnum.position: ERPositionDispatcher,
@@ -282,5 +296,6 @@ dispatcher_cls_by_type = {
     schemas.v2.StreamPrefixEnum.event: EREventDispatcher,
     schemas.v2.StreamPrefixEnum.event_update: EREventUpdateDispatcher,
     schemas.v2.StreamPrefixEnum.attachment: EREventAttachmentDispatcher,
-    schemas.v2.StreamPrefixEnum.observation: ERObservationDispatcher
+    schemas.v2.StreamPrefixEnum.observation: ERObservationDispatcher,
+    schemas.v2.StreamPrefixEnum.text_message: ERMessageDispatcher,
 }
