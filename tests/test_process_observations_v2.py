@@ -150,6 +150,53 @@ async def test_process_observation_v2_successfully(
 
 
 @pytest.mark.asyncio
+async def test_process_text_message_successfully(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+    text_message_as_pubsub_request
+):
+    # Mock external dependencies
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    await process_request(text_message_as_pubsub_request)
+    # Check that the config was retrieved from the portal
+    assert mock_gundi_client_v2_class.return_value.get_integration_details.called
+    # Check that the message was sent o ER with the right schema and params
+    assert mock_erclient_class.return_value.post_message.called
+    expected_message = {
+        "message_type": "inbox",
+        "text": "Assistance needed, please respond.",
+        "message_time": "2025-06-05T04:07:37.401000-07:00",
+        "device_location": {
+            "lon": -72.704459,
+            "lat": -51.688246
+        },
+        "additional": {
+            "status": {
+                "autonomous": 0,
+                "lowBattery": 1,
+                "intervalChange": 0,
+                "resetDetected": 0
+            }
+        }
+    }
+    expected_manufacturer_id = "2075752244"
+    mock_erclient_class.return_value.post_message.assert_called_once_with(
+        message=expected_message,
+        params={"manufacturer_id": expected_manufacturer_id}
+    )
+    # Check that the trace was written to redis db
+    assert mock_cache_empty.setex.called
+    assert mock_erclient_class.return_value.__aenter__.called
+
+
+
+@pytest.mark.asyncio
 async def test_system_event_is_published_on_successful_delivery(
     mocker,
     mock_cache_empty,

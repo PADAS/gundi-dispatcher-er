@@ -241,6 +241,7 @@ def mock_erclient_class(
         patch_report_reponse,
         post_report_attachment_response,
         post_camera_trap_report_response,
+        post_message_response,
         er_client_close_response
 ):
     mocked_erclient_class = mocker.MagicMock()
@@ -259,6 +260,9 @@ def mock_erclient_class(
     )
     erclient_mock.post_camera_trap_report.return_value = async_return(
         post_camera_trap_report_response
+    )
+    erclient_mock.post_message.return_value = async_return(
+        post_message_response
     )
     erclient_mock.close.return_value = async_return(
         er_client_close_response
@@ -431,6 +435,39 @@ def post_report_attachment_response():
 @pytest.fixture
 def post_camera_trap_report_response():
     return {}
+
+
+@pytest.fixture
+def post_message_response():
+    return {
+        "id": "da783214-0d79-4d8c-ba6c-687688e3f6e7",
+        "sender": {
+            "content_type": "observations.subject",
+            "id": "d2bd0ac8-080d-4be9-a8c2-2250623e6782",
+            "name": "gundi2",
+            "subject_type": "unassigned",
+            "subject_subtype": "mm-inreach-test",
+            "common_name": None,
+            "additional": {},
+            "created_at": "2025-06-05T07:05:12.817899-07:00",
+            "updated_at": "2025-06-05T07:05:12.817926-07:00",
+            "is_active": True,
+            "user": None,
+            "tracks_available": False,
+            "image_url": "/static/pin-black.svg"
+        },
+        "receiver": None,
+        "device": "443724d6-043f-4014-bea6-4d80a38469c8",
+        "message_type": "inbox",
+        "text": "Assistance needed, please respond.",
+        "status": "received",
+        "device_location": {
+            "latitude": -51.688246,
+            "longitude": -72.704459
+        },
+        "message_time": "2025-06-05T04:07:37.401000-07:00",
+        "read": False
+    }
 
 
 @pytest.fixture
@@ -1133,6 +1170,40 @@ def attachment_v2_as_request(mocker):
             },
             "messageId": "11937923011474847",
             "message_id": "11937923011474847",
+            "orderingKey": "",
+            "publishTime": f"{publish_time}",
+            "publish_time": f"{publish_time}"
+        },
+        'subscription': 'projects/MY-PROJECT/subscriptions/MY-SUB'
+    }
+    mock_request.data = json.dumps(json_data)
+    mock_request.get_json.return_value = json_data
+    return mock_request
+
+
+@pytest.fixture
+def text_message_as_pubsub_request(mocker):
+    mock_request = mocker.MagicMock()
+    mock_request.headers = [("Host", "sandbox-earth-dis-762049ee-0613-466b-99a2-59107eb-jba4og2dyq-uc.a.run.app")]
+    publish_time = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data = {
+        'message': {
+            'data': 'ewogICAiZXZlbnRfaWQiOiI0OGJkMDczYS04ZTM1LTQzY2YtOTFjMi1jN2I0Yjg3YTI2ZDciLAogICAidGltZXN0YW1wIjoiMjAyNS0wNi0wNSAxMzoyMzo0My45NTIwNTYtMDM6MDAiLAogICAic2NoZW1hX3ZlcnNpb24iOiJ2MSIsCiAgICJwYXlsb2FkIjp7CiAgICAgICJtZXNzYWdlX3R5cGUiOiJpbmJveCIsCiAgICAgICJtYW51ZmFjdHVyZXJfaWQiOiIyMDc1NzUyMjQ0IiwKICAgICAgInRleHQiOiJBc3Npc3RhbmNlIG5lZWRlZCwgcGxlYXNlIHJlc3BvbmQuIiwKICAgICAgIm1lc3NhZ2VfdGltZSI6IjIwMjUtMDYtMDUgMDQ6MDc6MzcuNDAxMDAwLTA3OjAwIiwKICAgICAgImRldmljZV9sb2NhdGlvbiI6ewogICAgICAgICAibG9uIjotNzIuNzA0NDU5LAogICAgICAgICAibGF0IjotNTEuNjg4MjQ2CiAgICAgIH0sCiAgICAgICJhZGRpdGlvbmFsIjp7CiAgICAgICAgICJzdGF0dXMiOnsKICAgICAgICAgICAgImF1dG9ub21vdXMiOjAsCiAgICAgICAgICAgICJsb3dCYXR0ZXJ5IjoxLAogICAgICAgICAgICAiaW50ZXJ2YWxDaGFuZ2UiOjAsCiAgICAgICAgICAgICJyZXNldERldGVjdGVkIjowCiAgICAgICAgIH0KICAgICAgfQogICB9LAogICAiZXZlbnRfdHlwZSI6Ik1lc3NhZ2VUcmFuc2Zvcm1lZEVSIgp9',
+            'attributes': {
+                "gundi_version": "v2",
+                "provider_key": "inreach",
+                "gundi_id": "23ca4b15-18b6-4cf4-9da6-36dd69c6f638",
+                "related_to": "None",
+                "stream_type": "txt",
+                "source_id": "afa0d606-c143-4705-955d-68133645db6d",
+                "external_source_id": "2075752244",
+                "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "annotations": "{}",
+                "tracing_context": "{}"
+            },
+            "messageId": "11937923011474850",
+            "message_id": "11937923011474850",
             "orderingKey": "",
             "publishTime": f"{publish_time}",
             "publish_time": f"{publish_time}"

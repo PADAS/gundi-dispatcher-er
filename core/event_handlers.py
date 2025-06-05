@@ -272,13 +272,13 @@ async def handle_er_observation(event: AttachmentTransformedER, attributes: dict
         return await dispatch_transformed_observation_v2(observation=event.payload, attributes=attributes)
 
 
-async def handle_er_message(message: MessageTransformedER, attributes: dict):
+async def handle_er_message(event: MessageTransformedER, attributes: dict):
     # Trace observations with Open Telemetry
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.handle_er_message", kind=SpanKind.CONSUMER
     ) as current_span:
-        current_span.set_attribute("payload", repr(message.payload))
-        return await dispatch_transformed_observation_v2(observation=message.payload, attributes=attributes)
+        current_span.set_attribute("payload", repr(event.payload))
+        return await dispatch_transformed_observation_v2(observation=event.payload, attributes=attributes)
 
 event_schemas = {
     "EventTransformedER": EventTransformedER,
