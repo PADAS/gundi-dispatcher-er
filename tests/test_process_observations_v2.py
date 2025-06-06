@@ -173,8 +173,8 @@ async def test_process_text_message_successfully(
         "text": "Assistance needed, please respond.",
         "message_time": "2025-06-05T04:07:37.401000-07:00",
         "device_location": {
-            "lon": -72.704459,
-            "lat": -51.688246
+            "longitude": -72.704459,
+            "latitude": -51.688246
         },
         "additional": {
             "status": {
