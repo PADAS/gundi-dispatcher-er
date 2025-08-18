@@ -53,6 +53,10 @@ TRACING_ENABLED = env.bool("TRACING_ENABLED", True)
 # Retries and dead-letter settings
 # ToDo: Get retry settings from the outbound config?
 GCP_PROJECT_ID = env.str("GCP_PROJECT_ID", "cdip-78ca")
-DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "destinations-dead-letter-dev")
+LEGACY_DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "dispatchers-dead-letter-prod")
+OBSERVATIONS_DEAD_LETTER_TOPIC = env.str("OBSERVATIONS_DEAD_LETTER_TOPIC", "observations-dead-letter")
+EVENTS_DEAD_LETTER_TOPIC = env.str("EVENTS_DEAD_LETTER_TOPIC", "events-dead-letter")
+EVENTS_UPDATES_DEAD_LETTER_TOPIC = env.str("EVENTS_UPDATES_DEAD_LETTER_TOPIC", "events-updates-dead-letter")
+ATTACHMENTS_DEAD_LETTER_TOPIC = env.str("ATTACHMENTS_DEAD_LETTER_TOPIC", "attachments-dead-letter")
 DISPATCHER_EVENTS_TOPIC = env.str("DISPATCHER_EVENTS_TOPIC", "dispatcher-events-dev")
 MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs
