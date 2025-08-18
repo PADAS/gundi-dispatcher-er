@@ -209,7 +209,7 @@ def mock_pubsub_client(mocker, observation_delivered_pubsub_message, gcp_pubsub_
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     mock_publisher.publish.return_value = async_return(gcp_pubsub_publish_response)
-    mock_publisher.topic_path.return_value = f"projects/{settings.GCP_PROJECT_ID}/topics/{settings.DISPATCHER_EVENTS_TOPIC}"
+    mock_publisher.topic_path.side_effect = lambda prj, dlq: f"projects/{prj}/topics/{dlq}"
     mock_client.PublisherClient.return_value = mock_publisher
     mock_client.PubsubMessage.return_value = observation_delivered_pubsub_message
     return mock_client
@@ -1216,76 +1216,116 @@ def text_message_as_pubsub_request(mocker):
 
 
 @pytest.fixture
-def event_v2_transformed_er():
-    return EventTransformedER.parse_obj(
-        {
-            "event_id": "ae7f61df-2b85-4703-95db-2ae2424c0df6",
-            "timestamp": "2024-07-24 14:50:50.065654+00:00",
-            "schema_version": "v1",
-            "payload": {
-                "title": "Animal Detected Test Event",
-                "event_type": "lion_sighting",
-                "time": "2025-01-22 14:18:12+00:00",
-                "location": {"longitude": 13.783065, "latitude": 13.688635},
-                "event_details": {"species": "Lion"}
+def text_message_v2_as_dict():
+    return {
+        "event_id": "48bd073a-8e35-43cf-91c2-c7b4b87a26d7",
+        "timestamp": "2025-06-05 13:23:43.952056-03:00",
+        "schema_version": "v1",
+        "payload": {
+            "message_type": "inbox",
+            "manufacturer_id": "2075752244",
+            "text": "Assistance needed, please respond.",
+            "message_time": "2025-06-05 04:07:37.401000-07:00",
+            "device_location": {
+                "longitude": -72.704459,
+                "latitude": -51.688246
             },
-            "event_type": "EventTransformedER"
-        }
-    )
-
-
-@pytest.fixture
-def attachment_v2_transformed_er():
-    return AttachmentTransformedER.parse_obj(
-        {
-            "event_id": "963dbc56-7eea-4949-b34e-a1c05daacc4e",
-            "timestamp": "2025-01-22 14:18:12+00:00",
-            "schema_version": "v1",
-            "payload": {
-                "file_path": "attachments/9bedc03e-8415-46db-aa70-782490cdff31_wild_dog-male.svg"
-            },
-            "event_type": "AttachmentTransformedER"
-        }
-    )
-
-
-@pytest.fixture
-def event_update_v2_transformed_er():
-    return EventUpdateTransformedER.parse_obj(
-        {
-            "event_id": "6322626a-5c41-486b-9a8a-8eff88a01221",
-            "timestamp": "2024-07-24 12:01:04.971240+00:00",
-            "schema_version": "v1",
-            "payload": {
-                "changes": {
-                    "state": "resolved"
+            "additional": {
+                "status": {
+                    "autonomous": 0,
+                    "lowBattery": 1,
+                    "intervalChange": 0,
+                    "resetDetected": 0
                 }
-            },
-            "event_type": "EventUpdateTransformedER"
-        }
-    )
+            }
+        },
+        "event_type": "MessageTransformedER"
+    }
 
 
 @pytest.fixture
-def observations_v2_transformed_er():
-    return ObservationTransformedER.parse_obj(
-        {
-            "event_id": "48bd073a-8e35-43cf-91c2-c7b4b87a26d7",
-            "timestamp": "2024-07-24 13:23:43.952056+00:00",
-            "schema_version": "v1",
-            "payload": {
-                "manufacturer_id": "test-device",
-                "source_type": "tracking-device",
-                "subject_name": "Mariano",
-                "subject_type": "mm-tracker",
-                "subject_subtype": "mm-tracker",
-                "recorded_at": "2024-07-22 11:51:05+00:00",
-                "location": {"lon": -72.704459, "lat": -51.688246},
-                "additional": {"speed_kmph": 30}
-            },
-            "event_type": "ObservationTransformedER"
-        }
-    )
+def event_v2_transformed_er_as_dict():
+    return {
+        "event_id": "ae7f61df-2b85-4703-95db-2ae2424c0df6",
+        "timestamp": "2024-07-24 14:50:50.065654+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "title": "Animal Detected Test Event",
+            "event_type": "lion_sighting",
+            "time": "2025-01-22 14:18:12+00:00",
+            "location": {"longitude": 13.783065, "latitude": 13.688635},
+            "event_details": {"species": "Lion"}
+        },
+        "event_type": "EventTransformedER"
+    }
+
+
+@pytest.fixture
+def event_v2_transformed_er(event_v2_transformed_er_as_dict):
+    return EventTransformedER.parse_obj(event_v2_transformed_er_as_dict)
+
+
+@pytest.fixture
+def attachment_v2_transformed_er_as_dict():
+    return {
+        "event_id": "963dbc56-7eea-4949-b34e-a1c05daacc4e",
+        "timestamp": "2025-01-22 14:18:12+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "file_path": "attachments/9bedc03e-8415-46db-aa70-782490cdff31_wild_dog-male.svg"
+        },
+        "event_type": "AttachmentTransformedER"
+    }
+
+
+@pytest.fixture
+def attachment_v2_transformed_er(attachment_v2_transformed_er_as_dict):
+    return AttachmentTransformedER.parse_obj(attachment_v2_transformed_er_as_dict)
+
+
+@pytest.fixture
+def event_update_v2_transformed_er_as_dict():
+    return {
+        "event_id": "6322626a-5c41-486b-9a8a-8eff88a01221",
+        "timestamp": "2024-07-24 12:01:04.971240+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "changes": {
+                "state": "resolved"
+            }
+        },
+        "event_type": "EventUpdateTransformedER"
+    }
+
+
+@pytest.fixture
+def event_update_v2_transformed_er(event_update_v2_transformed_er_as_dict):
+    return EventUpdateTransformedER.parse_obj(event_update_v2_transformed_er_as_dict)
+
+
+@pytest.fixture
+def observations_v2_transformed_er_as_dict():
+    return {
+        "event_id": "48bd073a-8e35-43cf-91c2-c7b4b87a26d7",
+        "timestamp": "2024-07-24 13:23:43.952056+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "manufacturer_id": "test-device",
+            "source_type": "tracking-device",
+            "subject_name": "Mariano",
+            "subject_type": "mm-tracker",
+            "subject_subtype": "mm-tracker",
+            "recorded_at": "2024-07-22 11:51:05+00:00",
+            "location": {"lon": -72.704459, "lat": -51.688246},
+            "additional": {"speed_kmph": 30}
+        },
+        "event_type": "ObservationTransformedER"
+    }
+
+
+@pytest.fixture
+def observations_v2_transformed_er(observations_v2_transformed_er_as_dict):
+    return ObservationTransformedER.parse_obj(observations_v2_transformed_er_as_dict)
 
 
 @pytest.fixture
@@ -1300,6 +1340,74 @@ def event_v2_attributes():
         "external_source_id": "Xyz123",
         "destination_id": "338225f3-91f9-4fe1-b013-353a229ce504",
         "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        "annotations": "{}",
+        "tracing_context": "{}"
+    }
+
+
+@pytest.fixture
+def event_update_v2_attributes():
+    return {
+        "gundi_version": "v2",
+        "provider_key": "gundi_traptagger_d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        "gundi_id": "6cb82182-51b2-4309-ba83-c99ed8e61ae8",
+        "related_to": "None",
+        "stream_type": "evu",
+        "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        "external_source_id": "camera123",
+        "destination_id": "f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+        "data_provider_id": "d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        "annotations": "{}",
+        "tracing_context": "{}"
+    }
+
+
+@pytest.fixture
+def attachment_v2_attributes():
+    return {
+        "gundi_version": "v2",
+        "provider_key": "gundi_traptagger_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        "gundi_id": "9bedc03e-8415-46db-aa70-782490cdff31",
+        "related_to": "6cb82182-51b2-4309-ba83-c99ed8e61ae8",
+        "stream_type": "att",
+        "source_id": "eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+        "external_source_id": "test-device",
+        "destination_id": "f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+        "data_provider_id": "d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        "annotations": "{}",
+        "tracing_context": "{}"
+    }
+
+
+@pytest.fixture
+def observation_v2_attributes():
+    return {
+        "gundi_version": "v2",
+        "provider_key": "awt_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        "gundi_id": "28074f3b-bf2f-43fa-8091-6943039935cd",
+        "related_to": "None",
+        "stream_type": "obv",
+        "source_id": "ab17e6ad-a677-4218-856b-59ad4d8d0e73",
+        "external_source_id": "test-device",
+        "destination_id": "f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+        "data_provider_id": "d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        "annotations": "{}",
+        "tracing_context": "{}"
+    }
+
+
+@pytest.fixture
+def text_message_v2_attributes():
+    return {
+        "gundi_version": "v2",
+        "provider_key": "inreach_ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        "gundi_id": "30074f3b-bf2f-43fa-8091-6943039935ab",
+        "related_to": "None",
+        "stream_type": "txt",
+        "source_id": "eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+        "external_source_id": "test-device",
+        "destination_id": "f45b1d48-46fc-414b-b1ca-7b56b87b2020",
+        "data_provider_id": "d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
         "annotations": "{}",
         "tracing_context": "{}"
     }

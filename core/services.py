@@ -79,7 +79,7 @@ async def dispatch_transformed_observation(
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
 
 
-def get_dlq_topic_for_observation_type(observation_type: str) -> str:
+def get_dlq_topic_for_data_type(observation_type: str) -> str:
     if observation_type == StreamPrefixEnum.observation:
         return settings.OBSERVATIONS_DEAD_LETTER_TOPIC
     elif observation_type == StreamPrefixEnum.event:
@@ -88,6 +88,8 @@ def get_dlq_topic_for_observation_type(observation_type: str) -> str:
         return settings.EVENTS_UPDATES_DEAD_LETTER_TOPIC
     elif observation_type == StreamPrefixEnum.attachment:
         return settings.ATTACHMENTS_DEAD_LETTER_TOPIC
+    elif observation_type == StreamPrefixEnum.text_message:
+        return settings.TEXT_MESSAGES_DEAD_LETTER_TOPIC
     else:
         return settings.LEGACY_DEAD_LETTER_TOPIC
 
@@ -109,8 +111,8 @@ async def send_observation_to_dead_letter_topic(transformed_observation, attribu
             client = pubsub.PublisherClient(session=session)
             # Get the topic
             if attributes.get("gundi_version", "v1") == "v2":
-                topic_name = get_dlq_topic_for_observation_type(
-                    observation_type=attributes.get("observation_type")
+                topic_name = get_dlq_topic_for_data_type(
+                    observation_type=attributes.get("stream_type")
                 )
             else:
                 topic_name = settings.LEGACY_DEAD_LETTER_TOPIC
