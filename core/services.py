@@ -3,6 +3,7 @@ import logging
 import aiohttp
 from datetime import datetime, timezone, timedelta
 from gcloud.aio import pubsub
+from gundi_core.schemas.v2 import StreamPrefixEnum
 from opentelemetry.trace import SpanKind
 from core import dispatchers
 from core.utils import (
@@ -78,6 +79,21 @@ async def dispatch_transformed_observation(
             raise DispatcherException(f"Exception occurred dispatching observation: {e}")
 
 
+def get_dlq_topic_for_data_type(data_type: StreamPrefixEnum) -> str:
+    if data_type == StreamPrefixEnum.observation:
+        return settings.OBSERVATIONS_DEAD_LETTER_TOPIC
+    elif data_type == StreamPrefixEnum.event:
+        return settings.EVENTS_DEAD_LETTER_TOPIC
+    elif data_type == StreamPrefixEnum.event_update:
+        return settings.EVENTS_UPDATES_DEAD_LETTER_TOPIC
+    elif data_type == StreamPrefixEnum.attachment:
+        return settings.ATTACHMENTS_DEAD_LETTER_TOPIC
+    elif data_type == StreamPrefixEnum.text_message:
+        return settings.TEXT_MESSAGES_DEAD_LETTER_TOPIC
+    else:
+        return settings.LEGACY_DEAD_LETTER_TOPIC
+
+
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
     with tracing.tracer.start_as_current_span(
             "send_message_to_dead_letter_topic", kind=SpanKind.CLIENT
@@ -94,7 +110,12 @@ async def send_observation_to_dead_letter_topic(transformed_observation, attribu
         ) as session:
             client = pubsub.PublisherClient(session=session)
             # Get the topic
-            topic_name = settings.DEAD_LETTER_TOPIC
+            if attributes.get("gundi_version", "v1") == "v2":
+                topic_name = get_dlq_topic_for_data_type(
+                    data_type=attributes.get("stream_type")
+                )
+            else:
+                topic_name = settings.LEGACY_DEAD_LETTER_TOPIC
             current_span.set_attribute("topic", topic_name)
             topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
             # Prepare the payload
