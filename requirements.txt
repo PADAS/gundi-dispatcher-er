@@ -27,7 +27,7 @@ blinker==1.9.0
     # via flask
 cachetools==5.5.2
     # via google-auth
-cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.4.4-alpha/cdip_connector-1.4.4-py3-none-any.whl
+cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.5.6/cdip_connector-1.5.6-py3-none-any.whl
     # via -r requirements.in
 certifi==2025.8.3
     # via
@@ -47,8 +47,6 @@ click==8.2.1
     #   uvicorn
 cloudevents==1.11.0
     # via functions-framework
-confluent-kafka==1.9.2
-    # via cdip-connector
 cryptography==41.0.7
     # via gcloud-aio-auth
 dateparser==1.2.2
@@ -126,7 +124,7 @@ gundi-client==1.0.4
     # via
     #   -r requirements.in
     #   cdip-connector
-gundi-client-v2==2.3.8
+gundi-client-v2==2.4.0
     # via -r requirements.in
 gundi-core==1.11.2
     # via
@@ -184,7 +182,6 @@ opentelemetry-api==1.14.0
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-aiohttp-client
-    #   opentelemetry-instrumentation-confluent-kafka
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-requests
     #   opentelemetry-propagator-gcp
@@ -204,8 +201,6 @@ opentelemetry-instrumentation==0.35b0
     #   opentelemetry-instrumentation-requests
 opentelemetry-instrumentation-aiohttp-client==0.35b0
     # via -r requirements.in
-opentelemetry-instrumentation-confluent-kafka==0.35b0
-    # via cdip-connector
 opentelemetry-instrumentation-httpx==0.35b0
     # via
     #   -r requirements.in
@@ -368,7 +363,6 @@ wrapt==1.17.3
     #   deprecated
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-aiohttp-client
-    #   opentelemetry-instrumentation-confluent-kafka
 yarl==1.20.1
     # via aiohttp
 
