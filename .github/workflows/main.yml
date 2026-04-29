@@ -3,7 +3,7 @@ name: Main Workflow
 on:
   push:
     branches:
-      - pipeline-refactor
+      - main
 
 jobs:
   main:
