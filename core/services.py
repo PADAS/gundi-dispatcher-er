@@ -4,12 +4,17 @@ import aiohttp
 from datetime import datetime, timezone, timedelta
 from gcloud.aio import pubsub
 from gundi_core.schemas.v2 import StreamPrefixEnum
+from gundi_core import events as system_events
+from gundi_core.events import UpdateErrorDetails, DeliveryErrorDetails
+from gundi_core.schemas import v2 as gundi_schemas_v2
 from opentelemetry.trace import SpanKind
 from core import dispatchers
 from core.utils import (
     extract_fields_from_message,
     get_inbound_integration_detail,
     get_outbound_config_detail,
+    is_null,
+    publish_event,
     ExtraKeys,
 )
 from .errors import DispatcherException, ReferenceDataError
@@ -136,6 +141,62 @@ async def send_observation_to_dead_letter_topic(transformed_observation, attribu
         current_span.set_attribute("is_sent_to_dead_letter_queue", True)
         current_span.add_event(
             name="routing_service.observation_sent_to_dead_letter_queue"
+        )
+
+
+async def publish_retries_exhausted_event(attributes: dict):
+    # Notify the portal that we gave up on this message so it's recorded as an
+    # ERROR in the activity log. Intermediate retriable failures are recorded
+    # as warnings, so without this event a message that never delivers would
+    # be dead-lettered silently.
+    gundi_id = attributes.get("gundi_id")
+    destination_id = attributes.get("destination_id")
+    if not gundi_id or not destination_id:
+        logger.warning(
+            "Cannot publish retries-exhausted event without gundi_id and destination_id.",
+            extra={"attributes": attributes},
+        )
+        return
+    data_provider_id = attributes.get("data_provider_id")
+    related_to = attributes.get("related_to")
+    related_to = None if is_null(related_to) else related_to
+    error_msg = (
+        f"Delivery retries exhausted (message older than {settings.MAX_EVENT_AGE_SECONDS} seconds). "
+        "Message sent to dead-letter queue."
+    )
+    if attributes.get("stream_type") == StreamPrefixEnum.event_update.value:
+        event = system_events.ObservationUpdateFailed(
+            payload=UpdateErrorDetails(
+                error=error_msg,
+                observation=gundi_schemas_v2.UpdatedObservation(
+                    gundi_id=gundi_id,
+                    related_to=related_to,
+                    data_provider_id=data_provider_id,
+                    destination_id=destination_id,
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
+        )
+    else:
+        event = system_events.ObservationDeliveryFailed(
+            payload=DeliveryErrorDetails(
+                error=error_msg,
+                observation=gundi_schemas_v2.DispatchedObservation(
+                    gundi_id=gundi_id,
+                    related_to=related_to,
+                    external_id=None,
+                    data_provider_id=data_provider_id,
+                    destination_id=destination_id,
+                    delivered_at=datetime.now(timezone.utc),
+                ),
+            )
+        )
+    try:
+        await publish_event(event=event, topic_name=settings.DISPATCHER_EVENTS_TOPIC)
+    except Exception as e:
+        logger.exception(
+            f"Error publishing retries-exhausted event for gundi_id {gundi_id}: {e}. "
+            "The message was still sent to the dead-letter topic."
         )
 
 
@@ -328,6 +389,8 @@ async def process_request(request):
             logger.warning(f"Event is too old (timestamp = {timestamp}) and will be sent to dead-letter.")
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
+            if attributes.get("gundi_version", "v1") == "v2":
+                await publish_retries_exhausted_event(attributes)
             return  # Skip the event
         # Process the event according to the gundi version
         if attributes.get("gundi_version", "v1") == "v2":
