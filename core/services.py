@@ -164,34 +164,34 @@ async def publish_retries_exhausted_event(attributes: dict):
         f"Delivery retries exhausted (message older than {settings.MAX_EVENT_AGE_SECONDS} seconds). "
         "Message sent to dead-letter queue."
     )
-    if attributes.get("stream_type") == StreamPrefixEnum.event_update.value:
-        event = system_events.ObservationUpdateFailed(
-            payload=UpdateErrorDetails(
-                error=error_msg,
-                observation=gundi_schemas_v2.UpdatedObservation(
-                    gundi_id=gundi_id,
-                    related_to=related_to,
-                    data_provider_id=data_provider_id,
-                    destination_id=destination_id,
-                    updated_at=datetime.now(timezone.utc),
-                ),
-            )
-        )
-    else:
-        event = system_events.ObservationDeliveryFailed(
-            payload=DeliveryErrorDetails(
-                error=error_msg,
-                observation=gundi_schemas_v2.DispatchedObservation(
-                    gundi_id=gundi_id,
-                    related_to=related_to,
-                    external_id=None,
-                    data_provider_id=data_provider_id,
-                    destination_id=destination_id,
-                    delivered_at=datetime.now(timezone.utc),
-                ),
-            )
-        )
     try:
+        if attributes.get("stream_type") == StreamPrefixEnum.event_update.value:
+            event = system_events.ObservationUpdateFailed(
+                payload=UpdateErrorDetails(
+                    error=error_msg,
+                    observation=gundi_schemas_v2.UpdatedObservation(
+                        gundi_id=gundi_id,
+                        related_to=related_to,
+                        data_provider_id=data_provider_id,
+                        destination_id=destination_id,
+                        updated_at=datetime.now(timezone.utc),
+                    ),
+                )
+            )
+        else:
+            event = system_events.ObservationDeliveryFailed(
+                payload=DeliveryErrorDetails(
+                    error=error_msg,
+                    observation=gundi_schemas_v2.DispatchedObservation(
+                        gundi_id=gundi_id,
+                        related_to=related_to,
+                        external_id=None,
+                        data_provider_id=data_provider_id,
+                        destination_id=destination_id,
+                        delivered_at=datetime.now(timezone.utc),
+                    ),
+                )
+            )
         await publish_event(event=event, topic_name=settings.DISPATCHER_EVENTS_TOPIC)
     except Exception as e:
         logger.exception(
