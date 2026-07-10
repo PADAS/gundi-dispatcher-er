@@ -135,6 +135,14 @@ async def test_fails_open_when_redis_unavailable(mock_throttle_db, throttling_en
 
 
 @pytest.mark.asyncio
+async def test_fails_open_on_unexpected_gate_errors(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.side_effect = TypeError("unexpected bug in the gate")
+
+    # Must not raise — any gate malfunction admits the message
+    await throttling.check_admission(destination_id="dest-1", stream_type="ev")
+
+
+@pytest.mark.asyncio
 async def test_noop_when_throttling_disabled(mock_throttle_db):
     # THROTTLING_ENABLED defaults to False — no Redis traffic at all
     await throttling.check_admission(destination_id="dest-1", stream_type="ev")

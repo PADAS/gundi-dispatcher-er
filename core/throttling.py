@@ -98,8 +98,10 @@ async def check_admission(destination_id, stream_type):
             admitted, reason, retry_after = _evaluate(destination_id, family)
             if admitted:
                 return
-    except redis_exceptions.RedisError as e:
-        # Fail open: throttling is a kindness, not a correctness requirement
+    except Exception as e:
+        # Fail open on ANY gate malfunction (Redis errors or bugs): throttling
+        # is a kindness, not a correctness requirement, and a broken gate must
+        # never 500-loop the stream.
         logger.warning(f"Throttle gate unavailable, admitting message: {e}")
         return
     logger.info(
