@@ -1,15 +1,12 @@
 import pytest
-import asyncio
 from redis import exceptions as redis_exceptions
 
 from core import settings, throttling
+from core.services import process_request
 from core.throttling import ThrottledMessage
+import main as main_module
 
-
-def async_return(result):
-    f = asyncio.Future()
-    f.set_result(result)
-    return f
+from .conftest import async_return
 
 
 @pytest.fixture
@@ -284,10 +281,6 @@ def test_record_functions_tolerate_redis_errors(mock_throttle_db, throttling_ena
     throttling.record_success(destination_id="dest-1", stream_type="ev")  # must not raise
 
 
-from core.services import process_request
-import main as main_module
-
-
 @pytest.mark.asyncio
 async def test_process_request_defers_v2_message_on_cooldown(
         mocker, mock_throttle_db, throttling_enabled,
@@ -326,7 +319,7 @@ async def test_process_request_admits_v2_message_under_cap(
 
 @pytest.mark.asyncio
 async def test_v1_messages_bypass_the_gate(
-        mocker, mock_throttle_db, throttling_enabled,
+        mocker, throttling_enabled,
         mock_cache_empty, mock_gundi_client_class, mock_erclient_class, mock_pubsub_client,
         position_as_request, outbound_configuration_gcp_pubsub
 ):
@@ -334,6 +327,9 @@ async def test_v1_messages_bypass_the_gate(
     mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
         [outbound_configuration_gcp_pubsub]
     )
+    # This patch installs mock_cache_empty as core.utils._cache_db for the
+    # duration of the test, so the gate assertion below must target it (the
+    # throttling gate reads utils._cache_db fresh at call time).
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
     mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
@@ -341,7 +337,7 @@ async def test_v1_messages_bypass_the_gate(
 
     await process_request(position_as_request)
 
-    mock_throttle_db.ttl.assert_not_called()
+    mock_cache_empty.ttl.assert_not_called()
 
 
 @pytest.mark.asyncio
