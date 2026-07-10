@@ -1,8 +1,15 @@
 import pytest
+import asyncio
 from redis import exceptions as redis_exceptions
 
 from core import settings, throttling
 from core.throttling import ThrottledMessage
+
+
+def async_return(result):
+    f = asyncio.Future()
+    f.set_result(result)
+    return f
 
 
 @pytest.fixture
@@ -275,3 +282,99 @@ def test_record_functions_tolerate_redis_errors(mock_throttle_db, throttling_ena
         destination_id="dest-1", stream_type="ev", status_code=429, error="...",
     ) is None
     throttling.record_success(destination_id="dest-1", stream_type="ev")  # must not raise
+
+
+from core.services import process_request
+import main as main_module
+
+
+@pytest.mark.asyncio
+async def test_process_request_defers_v2_message_on_cooldown(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class, mock_pubsub_client, event_v2_as_pubsub_request
+):
+    mock_throttle_db.ttl.return_value = 60  # site cooldown active
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+
+    with pytest.raises(ThrottledMessage):
+        await process_request(event_v2_as_pubsub_request)
+
+    # ER never touched; nothing published (deferrals are silent)
+    assert not mock_erclient_class.return_value.post_report.called
+    assert not mock_pubsub_client.PublisherClient.return_value.publish.called
+
+
+@pytest.mark.asyncio
+async def test_process_request_admits_v2_message_under_cap(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class,
+        mock_pubsub_client, event_v2_as_pubsub_request
+):
+    # Admission gate uses the same patched _cache_db as the config cache:
+    # ttl -> -2 (no cooldown), incr -> 1 (under cap), get -> None (cache miss)
+    mock_throttle_db.get.return_value = None
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+
+    await process_request(event_v2_as_pubsub_request)
+
+    assert mock_erclient_class.return_value.post_report.called
+
+
+@pytest.mark.asyncio
+async def test_v1_messages_bypass_the_gate(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_cache_empty, mock_gundi_client_class, mock_erclient_class, mock_pubsub_client,
+        position_as_request, outbound_configuration_gcp_pubsub
+):
+    # Set up the mock to return a valid outbound configuration
+    mock_gundi_client_class.return_value.get_outbound_integration_list.return_value = async_return(
+        [outbound_configuration_gcp_pubsub]
+    )
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.services.pubsub", mock_pubsub_client)
+
+    await process_request(position_as_request)
+
+    mock_throttle_db.ttl.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_too_old_messages_dead_letter_before_the_gate(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_pubsub_client, mock_publish_event, event_v2_as_pubsub_request_too_old
+):
+    mock_throttle_db.ttl.return_value = 60  # destination cooling down
+    mocker.patch("core.services.pubsub", mock_pubsub_client)
+    mocker.patch("core.services.publish_event", mock_publish_event)
+
+    # Must NOT raise ThrottledMessage: the age gate runs first and dead-letters
+    await process_request(event_v2_as_pubsub_request_too_old)
+
+    publish_calls = [c for c in mock_pubsub_client.PublisherClient.mock_calls if c[0] == "().publish"]
+    assert len(publish_calls) == 1  # DLQ publish happened
+    mock_throttle_db.ttl.assert_not_called()
+
+
+def test_main_returns_429_on_throttled_message(mocker):
+    mocker.patch.object(
+        main_module, "process_request",
+        side_effect=ThrottledMessage(
+            destination_id="dest-1", family="events", reason="cooldown", retry_after=42
+        ),
+    )
+    request = mocker.MagicMock()
+    request.data = b"{}"
+    request.headers = {}
+
+    body, status = main_module.main(request)
+
+    assert status == 429
+    assert body["status"] == "throttled"
+    assert body["destination_id"] == "dest-1"
+    assert body["family"] == "events"
