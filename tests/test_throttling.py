@@ -417,11 +417,41 @@ async def test_429_failure_records_family_distress_and_notifies(
     kwargs = mock_record.call_args.kwargs
     assert kwargs["status_code"] == 429
     assert kwargs["stream_type"] == "ev"
-    assert kwargs["retry_after"] is None  # erclient 1.15.0 doesn't expose it yet
+    assert kwargs["retry_after"] is None  # this exception carries no Retry-After
     # A cooldown-entry notice AND the regular failure event were published
     published_events = [c.kwargs["event"] for c in mock_publish_event.call_args_list]
     assert any(isinstance(ev, system_events.DispatcherCustomLog) for ev in published_events)
     assert any(isinstance(ev, system_events.ObservationDeliveryFailed) for ev in published_events)
+
+
+@pytest.mark.asyncio
+async def test_retry_after_from_erclient_drives_cooldown_ttl(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class,
+        mock_pubsub_client, mock_publish_event, event_v2_as_pubsub_request
+):
+    # End-to-end with the REAL record_distress: an ER 429 carrying Retry-After
+    # (exposed by erclient >= 1.16.0) becomes the family cooldown TTL,
+    # overriding the exponential default.
+    mock_throttle_db.get.return_value = None
+    _make_erclient_raising(mocker, mock_erclient_class, er_errors.ERClientRateLimitExceeded(
+        message="ER Too Many Requests ON POST https://fake-site.pamdas.org/api/v1.0/activity/events",
+        status_code=429, response_body="{}", retry_after=90,
+    ))
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch("core.event_handlers.publish_event", mock_publish_event)
+
+    from core.errors import DispatcherException
+    with pytest.raises(DispatcherException):
+        await process_request(event_v2_as_pubsub_request)
+
+    # The same Redis mock also serves the integration-config cache, so assert
+    # the cooldown write specifically rather than call counts
+    mock_throttle_db.setex.assert_any_call(
+        "throttle:cooldown:338225f3-91f9-4fe1-b013-353a229ce504:events", 90, "events"
+    )
 
 
 @pytest.mark.asyncio

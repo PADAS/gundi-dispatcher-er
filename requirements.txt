@@ -55,7 +55,7 @@ deprecated==1.2.18
     # via opentelemetry-api
 deprecation==2.1.0
     # via cloudevents
-earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.15.0/earthranger_client-1.15.0-py3-none-any.whl
+earthranger-client==1.16.0
     # via -r requirements.in
 environs==9.5.0
     # via
