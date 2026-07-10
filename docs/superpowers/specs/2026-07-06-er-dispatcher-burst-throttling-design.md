@@ -29,17 +29,35 @@ false-alarm problem solved in `2026-07-05-transient-er-delivery-errors-design.md
 ## Decision
 
 **Approach A — Redis admission gate + fast-nack** (chosen over hold-and-pace and
-Cloud Tasks; see Alternatives):
+Cloud Tasks; see Alternatives), **scoped per destination AND per stream-type
+family** — events are the primary rate-limit culprit, and a blended budget would
+let an event burst starve observations and messages that hit different, cheaper
+ER endpoints:
 
-- A per-destination **admission gate** (cooldown check + fixed-window token bucket in
-  Redis) runs before any ER work; over-cap or cooling-down messages are **nacked**
-  (HTTP 429 → PubSub redelivers with its existing 10s–600s backoff).
+- A **per-destination, per-family admission gate** (cooldown check + fixed-window
+  token bucket in Redis) runs before any ER work; over-cap or cooling-down messages
+  are **nacked** (HTTP 429 → PubSub redelivers with its existing 10s–600s backoff).
 - A **distress cooldown** is set when ER returns 429/502/503/504 or is unreachable,
-  with exponential TTL, honoring `Retry-After` once erclient exposes it.
+  with exponential TTL, honoring `Retry-After` once erclient exposes it. A 429 cools
+  only the family that triggered it; 5xx/transport failures cool the whole site.
 - A **grace-wait hybrid** sleeps briefly instead of nacking when the rate window
   opens within ~2s, reducing redelivery churn for near-cap traffic.
 - **Deferrals are silent** — no failure events, no activity logs — preserving the
   transient-error/alarm work.
+
+## Stream-type families
+
+Throttle state is keyed by `(destination_id, family)`, where family is derived from
+the message's `stream_type` attribute (available at the gate without any lookup):
+
+| Family | Stream types | ER surface | Default cap |
+|---|---|---|---|
+| `events` | `ev`, `evu`, `att` | activity/events API (heavy: event creation, updates, attachments post to events) | 120/min |
+| `observations` | `obv` | sensors API (cheap, bulk-tolerant) | 300/min |
+| `messages` | `txt` | messages API (low volume) | 60/min |
+
+Unknown or missing `stream_type` maps to `events` (the conservative family); such
+messages are typically dead-lettered downstream as unknown types anyway.
 
 ## Component 1 — Admission gate
 
@@ -52,14 +70,19 @@ dead-letters (with the ERROR event) instead of being nacked until PubSub's 7-day
 retention drops it silently. (v1 messages bypass the gate — deprecated path, low
 volume.)
 
-**Logic (single atomic Redis Lua script, one round trip):**
+**Logic (single atomic Redis Lua script, one round trip; `family` derived from
+`attributes.stream_type` per the table above):**
 
-1. If `throttle:cooldown:{destination_id}` exists → **DEFER** with
+1. If `throttle:cooldown:{destination_id}:site` exists (site-wide distress) OR
+   `throttle:cooldown:{destination_id}:{family}` exists → **DEFER** with
    `retry_after = TTL(key)`. This is the fast path that protects a struggling
    site: ~1ms, ER never touched.
-2. Else `INCR throttle:rate:{destination_id}:{epoch_minute}` (set `EXPIRE 120` on
-   first increment). If the counter ≤ cap → **ADMIT**; else → **DEFER** with
-   `retry_after = seconds until next minute window`.
+2. Else `INCR throttle:rate:{destination_id}:{family}:{epoch_minute}` (set
+   `EXPIRE 120` on first increment). If the counter ≤ the family's cap → **ADMIT**;
+   else → **DEFER** with `retry_after = seconds until next minute window`.
+
+Families are independent at the window level: an event burst exhausting the
+`events` budget never defers observations or messages for the same destination.
 
 **Grace-wait hybrid:** if DEFER came from the rate window (not a cooldown) and
 `retry_after ≤ THROTTLE_GRACE_WAIT_MAX_SECONDS` (default 2), `asyncio.sleep(retry_after)`
@@ -79,8 +102,10 @@ which now publishes an ERROR-level event — that remains the "we gave up" alarm
 
 **Cap resolution (hot path must never call the portal):**
 
-- Default: `DEFAULT_MAX_DELIVERIES_PER_MINUTE` env var (default **300** ≈ 5 rps).
-- Per-destination override: an optional integer read from the destination
+- Defaults per family: `DEFAULT_MAX_EVENT_DELIVERIES_PER_MINUTE` (**120**),
+  `DEFAULT_MAX_OBSERVATION_DELIVERIES_PER_MINUTE` (**300**),
+  `DEFAULT_MAX_MESSAGE_DELIVERIES_PER_MINUTE` (**60**).
+- Per-destination, per-family override: an optional integer read from the destination
   integration's config **only via the existing Redis config cache** (the dispatcher
   already caches integration details with a 60s TTL). Cache miss → use the env
   default for this message; the normal processing path refreshes the cache. The
@@ -97,12 +122,16 @@ dark; enable per environment after observing gate metrics in logs.
 publishes `ObservationDeliveryFailed`/`ObservationUpdateFailed`), plus the success
 path for reset.
 
-**Trigger — set/extend `throttle:cooldown:{destination_id}` when the send failure is:**
+**Trigger and scope — the two distress signals differ in blast radius:**
 
-- HTTP **429** (`status_code == 429`), or
-- HTTP **502/503/504** (`ERClientServiceUnreachable`), or
-- a connection/timeout failure (erclient wraps `httpx.RequestError` as
-  `ERClientException` with message prefix `"Request to ER failed"` and no status).
+- HTTP **429** (`status_code == 429`) is endpoint-level rate limiting → set
+  `throttle:cooldown:{destination_id}:{family}` for the family of the failed
+  message only. Events keep backing off while observations and messages flow.
+- HTTP **502/503/504** (`ERClientServiceUnreachable`) or a connection/timeout
+  failure (erclient wraps `httpx.RequestError` as `ERClientException` with message
+  prefix `"Request to ER failed"` and no status) is gateway/site-wide distress →
+  set `throttle:cooldown:{destination_id}:site`, which the gate checks for every
+  family.
 
 **Explicitly excluded: 409.** erclient maps 409 → `ERClientRateLimitExceeded`, but ER
 uses 409 as a *per-source* rate limit ("one observation per second per source").
@@ -110,13 +139,16 @@ Pausing an entire destination because one source is hot would over-throttle; 409
 keep today's behavior (PubSub retry; WARNING in the portal). Discriminate by
 `status_code`, not exception class.
 
-**TTL — exponential with reset:**
+**TTL — exponential with reset (levels tracked per scope):**
 
-- Level key `throttle:cooldown_level:{destination_id}` (its own TTL ~15 min).
+- Level keys `throttle:cooldown_level:{destination_id}:{family}` and
+  `...:site` (each with its own TTL ~15 min).
 - Cooldown TTL = `min(THROTTLE_COOLDOWN_BASE_SECONDS × 2^level, THROTTLE_COOLDOWN_MAX_SECONDS)`
-  (defaults 30s base, 600s max); each trigger increments the level.
-- A **successful delivery** to the destination deletes the level key (and any
-  lingering cooldown), so a recovered site returns to full rate immediately.
+  (defaults 30s base, 600s max); each trigger increments its scope's level.
+- A **successful delivery** deletes the `site` cooldown/level keys (the site is
+  demonstrably reachable) plus the delivered message's own family keys. Other
+  families' cooldowns are left to expire on their own — a flowing observation says
+  nothing about the events endpoint's rate limiter.
 
 **`Retry-After` (companion change in er-client):** verified that erclient
 **v1.15.0 (latest, released 2026-03-20) does not capture the header** — exceptions
@@ -134,10 +166,12 @@ cooldown only prevents *subsequent* attempts from reaching ER.
 
 ## Component 3 — Visibility without alarms
 
-When a destination **enters** cooldown (level 0 → 1, or SETNX on a notify key with
-~5 min TTL to rate-limit), publish one `DispatcherCustomLog` event (INFO level) to
-`DISPATCHER_EVENTS_TOPIC`: "Deliveries to this destination are temporarily deferred
-(destination rate-limited or overloaded)". The portal already handles
+When a destination **enters** cooldown in any scope (SETNX on a notify key with
+~5 min TTL to rate-limit, one notify key per destination), publish one
+`DispatcherCustomLog` event (INFO level) to `DISPATCHER_EVENTS_TOPIC`, naming the
+scope: "Event deliveries to this destination are temporarily deferred (rate
+limited)" / "Deliveries to this destination are temporarily deferred (destination
+unreachable or overloaded)". The portal already handles
 `DispatcherCustomLog` and INFO never counts toward health thresholds. This answers
 "why is my data delayed" in the activity log without tripping alarms or email.
 
@@ -176,7 +210,9 @@ this design. Ordering-off is also acceptable: early arrivals already self-heal v
 | Variable | Default | Purpose |
 |---|---|---|
 | `THROTTLING_ENABLED` | `false` | Kill switch; ship dark |
-| `DEFAULT_MAX_DELIVERIES_PER_MINUTE` | `300` | Standing per-destination cap |
+| `DEFAULT_MAX_EVENT_DELIVERIES_PER_MINUTE` | `120` | Standing cap, `events` family (`ev`/`evu`/`att`) |
+| `DEFAULT_MAX_OBSERVATION_DELIVERIES_PER_MINUTE` | `300` | Standing cap, `observations` family (`obv`) |
+| `DEFAULT_MAX_MESSAGE_DELIVERIES_PER_MINUTE` | `60` | Standing cap, `messages` family (`txt`) |
 | `THROTTLE_GRACE_WAIT_MAX_SECONDS` | `2` | Max in-request sleep before nacking |
 | `THROTTLE_COOLDOWN_BASE_SECONDS` | `30` | First cooldown TTL |
 | `THROTTLE_COOLDOWN_MAX_SECONDS` | `600` | Cooldown ceiling (also clamps Retry-After) |
@@ -185,14 +221,21 @@ this design. Ordering-off is also acceptable: early arrivals already self-heal v
 
 All Redis and PubSub mocked, matching suite conventions (`tests/conftest.py`):
 
-- Gate: admit under cap; defer over cap; defer immediately when cooldown key exists;
-  grace-wait sleeps and admits when the window is near; grace-wait not applied to
-  cooldowns; fail-open when Redis raises; no-op when `THROTTLING_ENABLED=false`.
+- Gate: admit under cap; defer over cap; defer immediately when a family or site
+  cooldown key exists; grace-wait sleeps and admits when the window is near;
+  grace-wait not applied to cooldowns; fail-open when Redis raises; no-op when
+  `THROTTLING_ENABLED=false`.
+- Family isolation: events over cap does NOT defer observations/messages for the
+  same destination; `ev`/`evu`/`att` share the `events` budget; unknown
+  stream_type maps to `events`.
 - `main.py`: DEFER → HTTP 429 response; no failure event published; message not
   processed.
-- Cooldown hook: set on 429, 503, and "Request to ER failed"; **not** set on 409 or
-  400; TTL escalates across consecutive failures and is clamped; success resets the
-  level; `retry_after` attribute wins when present.
+- Cooldown hook: 429 sets the failed message's family cooldown only (other
+  families still admitted); 503 and "Request to ER failed" set the site cooldown
+  (all families deferred); **not** set on 409 or 400; TTL escalates across
+  consecutive failures and is clamped; a successful delivery clears the site scope
+  and its own family scope but not other families; `retry_after` attribute wins
+  when present.
 - Custom log: published once on cooldown entry, rate-limited on repeat entries.
 - Regression: admitted messages flow through the existing dispatch path unchanged
   (existing suite must stay green).
@@ -202,7 +245,8 @@ All Redis and PubSub mocked, matching suite conventions (`tests/conftest.py`):
 1. Land dispatcher changes; deploy with `THROTTLING_ENABLED=false` (behavior
    identical to today).
 2. Enable in a staging/low-traffic environment; watch INFO gate logs and PubSub
-   redelivery metrics; tune `DEFAULT_MAX_DELIVERIES_PER_MINUTE`.
+   redelivery metrics; tune the three per-family default caps (events first — it's
+   the culprit family).
 3. Enable in production; set per-destination overrides for known-small ER sites.
 4. er-client `Retry-After` PR proceeds in parallel; pin bump when released.
 
@@ -223,8 +267,9 @@ All Redis and PubSub mocked, matching suite conventions (`tests/conftest.py`):
 
 ## Open items for the implementation plan
 
-- Exact portal-side location of the per-destination cap override (integration
-  config section/field name) and whether it ships in phase 1 or env-default-only.
+- Exact portal-side location of the per-destination, per-family cap overrides
+  (integration config section/field names) and whether they ship in phase 1 or
+  env-defaults-only.
 - Confirm `main.py`'s functions-framework response plumbing for returning a 429
   (flask-style tuple) and how `process_request`'s DEFER result propagates.
 - Confirm the Redis client in use (`walrus` wraps redis-py) exposes `eval`/
