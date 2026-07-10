@@ -374,3 +374,86 @@ def test_main_returns_429_on_throttled_message(mocker):
     assert body["status"] == "throttled"
     assert body["destination_id"] == "dest-1"
     assert body["family"] == "events"
+
+
+from erclient import er_errors
+from gundi_core import events as system_events
+
+
+def _make_erclient_raising(mocker, mock_erclient_class, error):
+    mock_erclient_class.return_value.post_report.side_effect = error
+    return mock_erclient_class
+
+
+@pytest.mark.asyncio
+async def test_429_failure_records_family_distress_and_notifies(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class,
+        mock_pubsub_client, mock_publish_event, event_v2_as_pubsub_request
+):
+    mock_throttle_db.get.return_value = None
+    _make_erclient_raising(mocker, mock_erclient_class, er_errors.ERClientRateLimitExceeded(
+        message="ER Too Many Requests ON POST https://fake-site.pamdas.org/api/v1.0/activity/events",
+        status_code=429, response_body="{}",
+    ))
+    mock_record = mocker.patch("core.throttling.record_distress", return_value="events")
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch("core.event_handlers.publish_event", mock_publish_event)
+
+    from core.errors import DispatcherException
+    with pytest.raises(DispatcherException):
+        await process_request(event_v2_as_pubsub_request)
+
+    kwargs = mock_record.call_args.kwargs
+    assert kwargs["status_code"] == 429
+    assert kwargs["stream_type"] == "ev"
+    assert kwargs["retry_after"] is None  # erclient 1.15.0 doesn't expose it yet
+    # A cooldown-entry notice AND the regular failure event were published
+    published_events = [c.kwargs["event"] for c in mock_publish_event.call_args_list]
+    assert any(isinstance(ev, system_events.DispatcherCustomLog) for ev in published_events)
+    assert any(isinstance(ev, system_events.ObservationDeliveryFailed) for ev in published_events)
+
+
+@pytest.mark.asyncio
+async def test_no_notice_published_when_already_notified(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class,
+        mock_pubsub_client, mock_publish_event, event_v2_as_pubsub_request
+):
+    mock_throttle_db.get.return_value = None
+    _make_erclient_raising(mocker, mock_erclient_class, er_errors.ERClientServiceUnreachable(
+        message="ER Service Unavailable ON POST ...", status_code=503, response_body="",
+    ))
+    mocker.patch("core.throttling.record_distress", return_value=None)  # SETNX lost
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch("core.event_handlers.publish_event", mock_publish_event)
+
+    from core.errors import DispatcherException
+    with pytest.raises(DispatcherException):
+        await process_request(event_v2_as_pubsub_request)
+
+    published_events = [c.kwargs["event"] for c in mock_publish_event.call_args_list]
+    assert not any(isinstance(ev, system_events.DispatcherCustomLog) for ev in published_events)
+
+
+@pytest.mark.asyncio
+async def test_successful_delivery_records_success(
+        mocker, mock_throttle_db, throttling_enabled,
+        mock_gundi_client_v2_class, mock_erclient_class,
+        mock_pubsub_client, event_v2_as_pubsub_request
+):
+    mock_throttle_db.get.return_value = None
+    mock_record_success = mocker.patch("core.throttling.record_success")
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+
+    await process_request(event_v2_as_pubsub_request)
+
+    kwargs = mock_record_success.call_args.kwargs
+    assert kwargs["stream_type"] == "ev"
+    assert str(kwargs["destination_id"]) == "338225f3-91f9-4fe1-b013-353a229ce504"
