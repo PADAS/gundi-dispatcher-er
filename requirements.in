@@ -1,6 +1,6 @@
 functions-framework==3.*
 walrus==0.9.5
-https://github.com/PADAS/er-client/releases/download/v1.8.0/earthranger_client-1.8.0-py3-none-any.whl
+https://github.com/PADAS/er-client/releases/download/v1.15.0/earthranger_client-1.15.0-py3-none-any.whl
 https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.5.6/cdip_connector-1.5.6-py3-none-any.whl
 gundi-core==1.11.2
 gundi-client==1.0.4
