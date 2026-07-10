@@ -109,3 +109,76 @@ async def check_admission(destination_id, stream_type):
     raise ThrottledMessage(
         destination_id=destination_id, family=family, reason=reason, retry_after=retry_after
     )
+
+
+SITE_DISTRESS_STATUSES = {502, 503, 504}
+TRANSPORT_ERROR_MARKER = "Request to ER failed"  # erclient's wrapper for httpx.RequestError
+
+
+def _scope_for_failure(status_code, error):
+    # 429 is endpoint-level rate limiting -> cool down the family only.
+    # 5xx / transport failures are site-wide distress -> cool down everything.
+    # 409 is ER's per-source limit ("one obs/sec/source") and must NOT pause
+    # the whole destination; other errors are not distress signals.
+    if status_code == 429:
+        return "family"
+    if status_code in SITE_DISTRESS_STATUSES:
+        return SITE_SCOPE
+    if not status_code and error and TRANSPORT_ERROR_MARKER in error:
+        return SITE_SCOPE
+    return None
+
+
+def record_distress(destination_id, stream_type, status_code=None, error=None, retry_after=None):
+    # Set/extend a cooldown after a failed delivery. Returns the scope string
+    # ("site" or a family name) when the portal should be notified (first
+    # cooldown within the notify window), else None.
+    if not settings.THROTTLING_ENABLED or not destination_id:
+        return None
+    scope = _scope_for_failure(status_code, error)
+    if not scope:
+        return None
+    scope_key = get_family(stream_type) if scope == "family" else SITE_SCOPE
+    db = utils._cache_db
+    try:
+        level = db.incr(_level_key(destination_id, scope_key))
+        db.expire(
+            _level_key(destination_id, scope_key),
+            settings.THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS,
+        )
+        if retry_after:
+            ttl = min(int(retry_after), settings.THROTTLE_COOLDOWN_MAX_SECONDS)
+        else:
+            ttl = min(
+                settings.THROTTLE_COOLDOWN_BASE_SECONDS * (2 ** (level - 1)),
+                settings.THROTTLE_COOLDOWN_MAX_SECONDS,
+            )
+        db.setex(_cooldown_key(destination_id, scope_key), ttl, scope_key)
+        # One notification per destination per notify window
+        notify = db.set(
+            f"throttle:notify:{destination_id}", "1",
+            ex=settings.THROTTLE_NOTIFY_TTL_SECONDS, nx=True,
+        )
+        return scope_key if notify else None
+    except redis_exceptions.RedisError as e:
+        logger.warning(f"Could not record destination distress: {e}")
+        return None
+
+
+def record_success(destination_id, stream_type):
+    # A successful delivery proves the site is reachable: clear the site scope
+    # and the delivered family's scope. Other families' cooldowns are left to
+    # expire — a flowing observation says nothing about the events endpoint.
+    if not settings.THROTTLING_ENABLED or not destination_id:
+        return
+    family = get_family(stream_type)
+    db = utils._cache_db
+    try:
+        db.delete(
+            _cooldown_key(destination_id, SITE_SCOPE),
+            _level_key(destination_id, SITE_SCOPE),
+            _cooldown_key(destination_id, family),
+            _level_key(destination_id, family),
+        )
+    except redis_exceptions.RedisError as e:
+        logger.warning(f"Could not clear throttle state after successful delivery: {e}")

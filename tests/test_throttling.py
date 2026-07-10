@@ -144,3 +144,134 @@ async def test_noop_without_destination_id(mock_throttle_db, throttling_enabled)
     await throttling.check_admission(destination_id=None, stream_type="ev")
 
     mock_throttle_db.ttl.assert_not_called()
+
+
+def test_429_sets_family_scoped_cooldown(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.return_value = 1  # first level
+    mock_throttle_db.set.return_value = True  # notify SETNX succeeds
+
+    scope = throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429,
+        error="ERClientRateLimitExceeded: ER Too Many Requests ON POST ...",
+    )
+
+    assert scope == "events"
+    mock_throttle_db.setex.assert_called_once_with(
+        "throttle:cooldown:dest-1:events", settings.THROTTLE_COOLDOWN_BASE_SECONDS, "events"
+    )
+
+
+@pytest.mark.parametrize("status_code,error", [
+    (502, "ERClientServiceUnreachable: ER Bad Gateway ON POST ..."),
+    (503, "ERClientServiceUnreachable: ER Service Unavailable ON POST ..."),
+    (504, "ERClientServiceUnreachable: ER Gateway Timeout ON POST ..."),
+    (None, "ERClientException: Request to ER failed: Connection timeout ..."),
+])
+def test_5xx_and_transport_failures_set_site_cooldown(
+        mock_throttle_db, throttling_enabled, status_code, error
+):
+    mock_throttle_db.incr.return_value = 1
+    mock_throttle_db.set.return_value = True
+
+    scope = throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=status_code, error=error,
+    )
+
+    assert scope == "site"
+    assert mock_throttle_db.setex.call_args.args[0] == "throttle:cooldown:dest-1:site"
+
+
+@pytest.mark.parametrize("status_code,error", [
+    (409, "ERClientRateLimitExceeded: ER Conflict ON POST ..."),  # per-source limit, not site distress
+    (400, "ERClientBadRequest: ER Bad Request ON POST ..."),
+    (401, "ERClientBadCredentials: ER Unauthorized ON POST ..."),
+    (None, "SomeOtherError: unrelated"),
+])
+def test_non_distress_failures_do_not_set_cooldowns(
+        mock_throttle_db, throttling_enabled, status_code, error
+):
+    scope = throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=status_code, error=error,
+    )
+
+    assert scope is None
+    mock_throttle_db.setex.assert_not_called()
+
+
+def test_cooldown_ttl_escalates_and_clamps(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.set.return_value = None  # already notified
+    base = settings.THROTTLE_COOLDOWN_BASE_SECONDS
+    # level (INCR return) -> expected TTL: 1->30, 2->60, 5->480, 6->600 (clamped)
+    for level, expected_ttl in [(1, base), (2, base * 2), (5, base * 16),
+                                (6, settings.THROTTLE_COOLDOWN_MAX_SECONDS)]:
+        mock_throttle_db.reset_mock()
+        mock_throttle_db.incr.return_value = level
+
+        throttling.record_distress(
+            destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+        )
+
+        assert mock_throttle_db.setex.call_args.args[1] == expected_ttl
+
+
+def test_retry_after_overrides_exponential_ttl_and_is_clamped(
+        mock_throttle_db, throttling_enabled
+):
+    mock_throttle_db.incr.return_value = 1
+    mock_throttle_db.set.return_value = None
+
+    throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+        retry_after=90,
+    )
+    assert mock_throttle_db.setex.call_args.args[1] == 90
+
+    throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+        retry_after=9000,  # clamped to the ceiling
+    )
+    assert mock_throttle_db.setex.call_args.args[1] == settings.THROTTLE_COOLDOWN_MAX_SECONDS
+
+
+def test_notify_flag_rate_limited_by_setnx(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.return_value = 1
+    mock_throttle_db.set.return_value = None  # SETNX lost: already notified recently
+
+    scope = throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+    )
+
+    assert scope is None  # cooldown still set, but no notification due
+    mock_throttle_db.setex.assert_called_once()
+
+
+def test_success_clears_site_and_own_family_only(mock_throttle_db, throttling_enabled):
+    throttling.record_success(destination_id="dest-1", stream_type="obv")
+
+    deleted = mock_throttle_db.delete.call_args.args
+    assert set(deleted) == {
+        "throttle:cooldown:dest-1:site",
+        "throttle:cooldown_level:dest-1:site",
+        "throttle:cooldown:dest-1:observations",
+        "throttle:cooldown_level:dest-1:observations",
+    }
+
+
+def test_record_functions_are_noop_when_disabled(mock_throttle_db):
+    assert throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+    ) is None
+    throttling.record_success(destination_id="dest-1", stream_type="ev")
+
+    mock_throttle_db.setex.assert_not_called()
+    mock_throttle_db.delete.assert_not_called()
+
+
+def test_record_functions_tolerate_redis_errors(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.side_effect = redis_exceptions.ConnectionError("boom")
+    mock_throttle_db.delete.side_effect = redis_exceptions.ConnectionError("boom")
+
+    assert throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+    ) is None
+    throttling.record_success(destination_id="dest-1", stream_type="ev")  # must not raise
