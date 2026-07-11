@@ -70,7 +70,10 @@ def _evaluate(destination_id, family):
     db = utils._cache_db
     for scope in (SITE_SCOPE, family):
         ttl = db.ttl(_cooldown_key(destination_id, scope))
-        if ttl and ttl > 0:
+        # TTL semantics: -2 missing, -1 no expiry (shouldn't happen for our
+        # setex keys; treated as no cooldown, failing open), 0 = expiring this
+        # second - still honored so nothing leaks through the final second.
+        if ttl is not None and ttl >= 0:
             return False, "cooldown", ttl
     now = int(time.time())
     rate_key = _rate_key(destination_id, family, now // 60)
@@ -162,7 +165,10 @@ def record_distress(destination_id, stream_type, status_code=None, error=None, r
             ex=settings.THROTTLE_NOTIFY_TTL_SECONDS, nx=True,
         )
         return scope_key if notify else None
-    except redis_exceptions.RedisError as e:
+    except Exception as e:
+        # Fail open on ANY error (Redis or bugs, e.g. a malformed retry_after):
+        # this runs inside the dispatch failure handler, and an escaping
+        # exception here would suppress the failure event for the portal.
         logger.warning(f"Could not record destination distress: {e}")
         return None
 
@@ -182,5 +188,7 @@ def record_success(destination_id, stream_type):
             _cooldown_key(destination_id, family),
             _level_key(destination_id, family),
         )
-    except redis_exceptions.RedisError as e:
+    except Exception as e:
+        # Fail open: an escaping exception here would turn a SUCCESSFUL
+        # delivery into a retry (duplicate data at the destination)
         logger.warning(f"Could not clear throttle state after successful delivery: {e}")

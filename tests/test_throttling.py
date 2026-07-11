@@ -279,6 +279,33 @@ def test_record_functions_are_noop_when_disabled(mock_throttle_db):
     mock_throttle_db.delete.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_expiring_cooldown_still_defers_in_its_final_second(
+        mock_throttle_db, throttling_enabled
+):
+    mock_throttle_db.ttl.side_effect = [0]  # site cooldown expiring this second
+
+    with pytest.raises(ThrottledMessage) as exc_info:
+        await throttling.check_admission(destination_id="dest-1", stream_type="ev")
+
+    assert exc_info.value.reason == "cooldown"
+    assert exc_info.value.retry_after == 0
+
+
+def test_record_functions_tolerate_non_redis_errors(mock_throttle_db, throttling_enabled):
+    # record_distress runs inside the dispatch failure handler; a bug here
+    # (e.g. malformed retry_after) must never suppress the failure event
+    mock_throttle_db.incr.return_value = 1
+
+    assert throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+        retry_after="not-a-number",
+    ) is None
+
+    mock_throttle_db.delete.side_effect = TypeError("boom")
+    throttling.record_success(destination_id="dest-1", stream_type="ev")  # must not raise
+
+
 def test_record_functions_tolerate_redis_errors(mock_throttle_db, throttling_enabled):
     mock_throttle_db.incr.side_effect = redis_exceptions.ConnectionError("boom")
     mock_throttle_db.delete.side_effect = redis_exceptions.ConnectionError("boom")
