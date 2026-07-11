@@ -2,7 +2,6 @@ import asyncio
 import logging
 import time
 
-from redis import exceptions as redis_exceptions
 
 from core import settings
 from core import utils

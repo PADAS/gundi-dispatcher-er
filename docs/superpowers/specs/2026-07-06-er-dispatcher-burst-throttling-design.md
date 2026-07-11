@@ -4,6 +4,15 @@
 **Status:** Approved for planning
 **Repos affected:** `gundi-dispatcher-er` (primary), `er-client` (companion), routing publisher (recommendation only)
 
+> **SUPERSEDED DETAILS (2026-07-11):** events moved faster than this document.
+> er-client shipped `retry_after` (PADAS/er-client#53) and was released as
+> **1.16.0 via the new trusted-publishing pipeline**, so this PR pins
+> `earthranger-client==1.16.0` from PyPI (not the v1.15.0 GitHub wheel) and
+> the Retry-After override is live end-to-end (see
+> `test_retry_after_from_erclient_drives_cooldown_ttl`). References below to
+> v1.15.0, the wheel URL, and a "companion PR / later pin bump" are retained
+> as written history.
+
 ## Problem
 
 The deployment scheme for ER dispatchers changed: instead of one small Cloud Function

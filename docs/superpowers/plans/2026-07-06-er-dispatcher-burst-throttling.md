@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **SUPERSEDED DETAILS (2026-07-11):** Task 6's er-client change shipped as
+> PADAS/er-client#53 and was released as **1.16.0** (first release through the
+> new trusted-publishing workflow), so Task 5's pin target became
+> `earthranger-client==1.16.0` from PyPI instead of the v1.15.0 GitHub wheel,
+> and `retry_after` is exercised end-to-end in this repo's suite. Version
+> numbers, wheel URLs, and "not yet exposed" comments below are retained as
+> written history.
+
 **Goal:** Per-destination, per-stream-family burst throttling in the shared ER dispatcher: a Redis admission gate that nacks over-cap/cooling-down messages with HTTP 429, distress cooldowns scoped by failure type, and a companion er-client change exposing `Retry-After`.
 
 **Architecture:** A new `core/throttling.py` module owns all throttle state in Redis (via the existing `core.utils._cache_db` handle): fixed-window rate counters and cooldown keys, both keyed by `(destination_id, family)` plus a site-wide cooldown scope. `process_request` checks admission after the age gate; `main.py` converts a `ThrottledMessage` into an HTTP 429 (PubSub nack). The v2 dispatch exception/success paths record distress and recovery. Everything ships dark behind `THROTTLING_ENABLED=false`.
