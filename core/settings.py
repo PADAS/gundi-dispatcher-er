@@ -61,3 +61,7 @@ ATTACHMENTS_DEAD_LETTER_TOPIC = env.str("ATTACHMENTS_DEAD_LETTER_TOPIC", "attach
 TEXT_MESSAGES_DEAD_LETTER_TOPIC = env.str("TEXT_MESSAGES_DEAD_LETTER_TOPIC", "text-messages-dead-letter")
 DISPATCHER_EVENTS_TOPIC = env.str("DISPATCHER_EVENTS_TOPIC", "dispatcher-events-dev")
 MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs
+# Hard bound for publishing the retries-exhausted notification after a DLQ
+# send. publish_event retries with backoff (worst case ~65s), which could
+# outlive the function timeout and un-ack an already-dead-lettered message.
+RETRIES_EXHAUSTED_PUBLISH_TIMEOUT_SECONDS = env.int("RETRIES_EXHAUSTED_PUBLISH_TIMEOUT_SECONDS", 10)

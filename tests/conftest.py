@@ -1430,3 +1430,31 @@ def observation_delivered_event(dispatched_observation):
     return system_events.ObservationDelivered(
         payload=dispatched_observation
     )
+
+
+def _make_request_too_old(request_fixture):
+    # Rewind publish_time so is_too_old() routes the message to the DLQ
+    json_data = request_fixture.get_json.return_value
+    old_publish_time = (
+        datetime.datetime.now(datetime.timezone.utc)
+        - datetime.timedelta(seconds=settings.MAX_EVENT_AGE_SECONDS + 3600)
+    ).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    json_data["message"]["publish_time"] = old_publish_time
+    json_data["message"]["publishTime"] = old_publish_time
+    request_fixture.data = json.dumps(json_data)
+    return request_fixture
+
+
+@pytest.fixture
+def event_v2_as_pubsub_request_too_old(event_v2_as_pubsub_request):
+    return _make_request_too_old(event_v2_as_pubsub_request)
+
+
+@pytest.fixture
+def event_update_v2_as_pubsub_request_too_old(event_update_v2_as_pubsub_request):
+    return _make_request_too_old(event_update_v2_as_pubsub_request)
+
+
+@pytest.fixture
+def position_as_request_too_old(position_as_request):
+    return _make_request_too_old(position_as_request)
