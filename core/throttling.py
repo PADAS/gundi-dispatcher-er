@@ -168,8 +168,12 @@ def record_distress(destination_id, stream_type, status_code=None, error=None, r
         if retry_after_seconds is not None and retry_after_seconds > 0:
             ttl = min(retry_after_seconds, settings.THROTTLE_COOLDOWN_MAX_SECONDS)
         else:
+            # Clamp the exponent BEFORE exponentiating: level is an unbounded
+            # counter under sustained failures, and 2**huge builds a giant
+            # integer just for min() to discard (2**10 x base already exceeds
+            # any sane ceiling).
             ttl = min(
-                settings.THROTTLE_COOLDOWN_BASE_SECONDS * (2 ** (level - 1)),
+                settings.THROTTLE_COOLDOWN_BASE_SECONDS * (2 ** min(level - 1, 10)),
                 settings.THROTTLE_COOLDOWN_MAX_SECONDS,
             )
         db.setex(_cooldown_key(destination_id, scope_key), ttl, scope_key)

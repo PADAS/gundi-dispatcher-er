@@ -226,6 +226,19 @@ def test_cooldown_ttl_escalates_and_clamps(mock_throttle_db, throttling_enabled)
         assert mock_throttle_db.setex.call_args.args[1] == expected_ttl
 
 
+def test_huge_cooldown_level_still_yields_clamped_ttl(mock_throttle_db, throttling_enabled):
+    # level grows unboundedly under sustained failures; the exponent must be
+    # clamped before exponentiation so the TTL math stays cheap and capped
+    mock_throttle_db.incr.return_value = 1_000_000
+    mock_throttle_db.set.return_value = None
+
+    throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+    )
+
+    assert mock_throttle_db.setex.call_args.args[1] == settings.THROTTLE_COOLDOWN_MAX_SECONDS
+
+
 def test_retry_after_overrides_exponential_ttl_and_is_clamped(
         mock_throttle_db, throttling_enabled
 ):
