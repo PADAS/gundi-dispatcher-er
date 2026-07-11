@@ -14,6 +14,13 @@ OBSERVATIONS_FAMILY = "observations"
 MESSAGES_FAMILY = "messages"
 SITE_SCOPE = "site"
 
+# Portal-facing singular display names (used in cooldown notices)
+FAMILY_DISPLAY_NAMES = {
+    EVENTS_FAMILY: "Event",
+    OBSERVATIONS_FAMILY: "Observation",
+    MESSAGES_FAMILY: "Message",
+}
+
 FAMILY_BY_STREAM_TYPE = {
     "ev": EVENTS_FAMILY,
     "evu": EVENTS_FAMILY,
@@ -152,10 +159,15 @@ def record_distress(destination_id, stream_type, status_code=None, error=None, r
             settings.THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS,
         )
         # Only a positive Retry-After overrides the exponential default:
-        # 0 means "retry now" (not a cooldown request) and negatives are
-        # malformed - both fall through to the exponential TTL.
-        if retry_after is not None and int(retry_after) > 0:
-            ttl = min(int(retry_after), settings.THROTTLE_COOLDOWN_MAX_SECONDS)
+        # 0 means "retry now", negatives and non-numeric values are malformed.
+        # All of those fall through to the exponential TTL - a malformed
+        # header must never abort the cooldown write itself.
+        try:
+            retry_after_seconds = int(retry_after) if retry_after is not None else None
+        except (TypeError, ValueError):
+            retry_after_seconds = None
+        if retry_after_seconds is not None and retry_after_seconds > 0:
+            ttl = min(retry_after_seconds, settings.THROTTLE_COOLDOWN_MAX_SECONDS)
         else:
             ttl = min(
                 settings.THROTTLE_COOLDOWN_BASE_SECONDS * (2 ** (level - 1)),

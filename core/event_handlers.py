@@ -36,7 +36,8 @@ async def publish_throttling_notice(attributes: dict, scope: str):
     if scope == throttling.SITE_SCOPE:
         title = "Deliveries to this destination are temporarily deferred (destination unreachable or overloaded)"
     else:
-        title = f"{scope[:-1].capitalize()} deliveries to this destination are temporarily deferred (rate limited)"
+        family_name = throttling.FAMILY_DISPLAY_NAMES.get(scope, scope.capitalize())
+        title = f"{family_name} deliveries to this destination are temporarily deferred (rate limited)"
     try:
         await publish_event(
             event=system_events.DispatcherCustomLog(

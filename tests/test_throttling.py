@@ -309,16 +309,26 @@ async def test_expiring_cooldown_still_defers_in_its_final_second(
     assert exc_info.value.retry_after == 0
 
 
-def test_record_functions_tolerate_non_redis_errors(mock_throttle_db, throttling_enabled):
-    # record_distress runs inside the dispatch failure handler; a bug here
-    # (e.g. malformed retry_after) must never suppress the failure event
+def test_malformed_retry_after_still_sets_exponential_cooldown(
+        mock_throttle_db, throttling_enabled
+):
+    # A malformed Retry-After must not abort the cooldown write - the
+    # distress signal (429) is real even when the header is garbage
     mock_throttle_db.incr.return_value = 1
+    mock_throttle_db.set.return_value = True
 
-    assert throttling.record_distress(
+    scope = throttling.record_distress(
         destination_id="dest-1", stream_type="ev", status_code=429, error="...",
         retry_after="not-a-number",
-    ) is None
+    )
 
+    assert scope == "events"
+    assert mock_throttle_db.setex.call_args.args[1] == settings.THROTTLE_COOLDOWN_BASE_SECONDS
+
+
+def test_record_functions_tolerate_non_redis_errors(mock_throttle_db, throttling_enabled):
+    # An unexpected bug in success bookkeeping must never turn a successful
+    # delivery into a retry
     mock_throttle_db.delete.side_effect = TypeError("boom")
     throttling.record_success(destination_id="dest-1", stream_type="ev")  # must not raise
 
