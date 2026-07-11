@@ -10,7 +10,7 @@ from gundi_core.events.transformers import (
     ObservationTransformedER,
     MessageTransformedER
 )
-from core import tracing, dispatchers, settings
+from core import tracing, dispatchers, settings, throttling
 from core.errors import ReferenceDataError, DispatcherException
 from core.utils import (
     ExtraKeys,
@@ -22,10 +22,38 @@ from core.utils import (
 )
 from gundi_core.schemas import v2 as gundi_schemas_v2
 from gundi_core import events as system_events, schemas
+from gundi_core.schemas.v2 import LogLevel
 from opentelemetry.trace import SpanKind
 
 
 logger = logging.getLogger(__name__)
+
+
+async def publish_throttling_notice(attributes: dict, scope: str):
+    # One INFO-level breadcrumb in the portal activity log when a destination
+    # enters cooldown ("why is my data delayed"). INFO never counts toward
+    # health thresholds. Failures here must not affect delivery handling.
+    if scope == throttling.SITE_SCOPE:
+        title = "Deliveries to this destination are temporarily deferred (destination unreachable or overloaded)"
+    else:
+        family_name = throttling.FAMILY_DISPLAY_NAMES.get(scope, scope.capitalize())
+        title = f"{family_name} deliveries to this destination are temporarily deferred (rate limited)"
+    try:
+        await publish_event(
+            event=system_events.DispatcherCustomLog(
+                payload=gundi_schemas_v2.CustomDispatcherLog(
+                    gundi_id=attributes.get("gundi_id"),
+                    related_to=attributes.get("related_to"),
+                    data_provider_id=attributes.get("data_provider_id"),
+                    destination_id=attributes.get("destination_id"),
+                    title=title,
+                    level=LogLevel.INFO,
+                )
+            ),
+            topic_name=settings.DISPATCHER_EVENTS_TOPIC,
+        )
+    except Exception as e:
+        logger.exception(f"Error publishing throttling notice: {e}")
 
 
 async def dispatch_transformed_observation_v2(observation, attributes: dict):
@@ -149,6 +177,15 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                         ExtraKeys.AttentionNeeded: True,
                     },
                 )
+                notify_scope = throttling.record_distress(
+                    destination_id=destination_id,
+                    stream_type=stream_type,
+                    status_code=getattr(e, "status_code", None),
+                    error=error,
+                    retry_after=getattr(e, "retry_after", None),
+                )
+                if notify_scope:
+                    await publish_throttling_notice(attributes=attributes, scope=notify_scope)
                 # Emit events for the portal and other interested services (EDA)
                 if stream_type == schemas.v2.StreamPrefixEnum.event_update.value:
                     await publish_event(
@@ -192,6 +229,9 @@ async def dispatch_transformed_observation_v2(observation, attributes: dict):
                 raise DispatcherException(error_msg)
             else:
                 logger.debug(f"Observation {gundi_id} delivered with success. ER response: {result}")
+                throttling.record_success(
+                    destination_id=destination_id, stream_type=stream_type
+                )
                 current_span.set_attribute("is_dispatched_successfully", True)
                 current_span.set_attribute("destination_id", str(destination_id))
                 current_span.add_event(

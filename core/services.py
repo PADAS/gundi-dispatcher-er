@@ -10,6 +10,7 @@ from gundi_core.events import UpdateErrorDetails, DeliveryErrorDetails
 from gundi_core.schemas import v2 as gundi_schemas_v2
 from opentelemetry.trace import SpanKind
 from core import dispatchers
+from core import throttling
 from core.utils import (
     extract_fields_from_message,
     get_inbound_integration_detail,
@@ -403,6 +404,13 @@ async def process_request(request):
             return  # Skip the event
         # Process the event according to the gundi version
         if attributes.get("gundi_version", "v1") == "v2":
+            # Admission gate: defer over-cap / cooling-down destinations.
+            # Runs after the too-old check above so exhausted messages always
+            # dead-letter instead of being nacked past PubSub retention.
+            await throttling.check_admission(
+                destination_id=attributes.get("destination_id"),
+                stream_type=attributes.get("stream_type"),
+            )
             await process_transformer_event_v2(transformed_observation, attributes)
         else:  # Default to v1
             await process_transformed_observation(transformed_observation, attributes)
