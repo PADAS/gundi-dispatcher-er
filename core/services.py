@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import aiohttp
@@ -192,7 +193,15 @@ async def publish_retries_exhausted_event(attributes: dict):
                     ),
                 )
             )
-        await publish_event(event=event, topic_name=settings.DISPATCHER_EVENTS_TOPIC)
+        # Bound the total publish time: publish_event retries with backoff
+        # (worst case ~65s), which could exceed the function timeout and cause
+        # the platform to kill us AFTER the DLQ send but BEFORE the ack -
+        # redelivering and dead-lettering the same message repeatedly. A
+        # timeout here lands in the except below and the message is acked.
+        await asyncio.wait_for(
+            publish_event(event=event, topic_name=settings.DISPATCHER_EVENTS_TOPIC),
+            timeout=settings.RETRIES_EXHAUSTED_PUBLISH_TIMEOUT_SECONDS,
+        )
     except Exception as e:
         logger.exception(
             f"Error publishing retries-exhausted event for gundi_id {gundi_id}: {e}. "

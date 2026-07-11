@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import pytest
 
 from core import settings
@@ -103,3 +106,25 @@ async def test_failure_publishing_retries_exhausted_event_does_not_raise(
 
     # Must not raise: the DLQ send already succeeded and the message must be acked
     await process_request(event_v2_as_pubsub_request_too_old)
+
+
+@pytest.mark.asyncio
+async def test_slow_event_publish_cannot_delay_the_dlq_ack(
+        mocker, mock_pubsub_client, event_v2_as_pubsub_request_too_old
+):
+    # publish_event retries with backoff (worst case ~65s); if the events
+    # topic is down, the retries-exhausted notification must be cut off by
+    # RETRIES_EXHAUSTED_PUBLISH_TIMEOUT_SECONDS so the function can return
+    # (ack) before the platform timeout would kill it.
+    async def hanging_publish(**kwargs):
+        await asyncio.sleep(30)
+
+    mocker.patch("core.services.pubsub", mock_pubsub_client)
+    mocker.patch("core.services.publish_event", side_effect=hanging_publish)
+    mocker.patch.object(settings, "RETRIES_EXHAUSTED_PUBLISH_TIMEOUT_SECONDS", 0.05)
+
+    start = time.monotonic()
+    # Must neither raise nor hang: the DLQ send already happened and the
+    # message must be acked
+    await process_request(event_v2_as_pubsub_request_too_old)
+    assert time.monotonic() - start < 5
