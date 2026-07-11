@@ -245,6 +245,23 @@ def test_retry_after_overrides_exponential_ttl_and_is_clamped(
     assert mock_throttle_db.setex.call_args.args[1] == settings.THROTTLE_COOLDOWN_MAX_SECONDS
 
 
+@pytest.mark.parametrize("retry_after", [0, -5])
+def test_non_positive_retry_after_falls_back_to_exponential_ttl(
+        mock_throttle_db, throttling_enabled, retry_after
+):
+    # Retry-After: 0 means "retry now", negatives are malformed - neither is
+    # a cooldown request, so the exponential default applies
+    mock_throttle_db.incr.return_value = 1
+    mock_throttle_db.set.return_value = None
+
+    throttling.record_distress(
+        destination_id="dest-1", stream_type="ev", status_code=429, error="...",
+        retry_after=retry_after,
+    )
+
+    assert mock_throttle_db.setex.call_args.args[1] == settings.THROTTLE_COOLDOWN_BASE_SECONDS
+
+
 def test_notify_flag_rate_limited_by_setnx(mock_throttle_db, throttling_enabled):
     mock_throttle_db.incr.return_value = 1
     mock_throttle_db.set.return_value = None  # SETNX lost: already notified recently

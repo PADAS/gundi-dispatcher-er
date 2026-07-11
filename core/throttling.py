@@ -151,7 +151,10 @@ def record_distress(destination_id, stream_type, status_code=None, error=None, r
             _level_key(destination_id, scope_key),
             settings.THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS,
         )
-        if retry_after:
+        # Only a positive Retry-After overrides the exponential default:
+        # 0 means "retry now" (not a cooldown request) and negatives are
+        # malformed - both fall through to the exponential TTL.
+        if retry_after is not None and int(retry_after) > 0:
             ttl = min(int(retry_after), settings.THROTTLE_COOLDOWN_MAX_SECONDS)
         else:
             ttl = min(
