@@ -150,7 +150,8 @@ keep today's behavior (PubSub retry; WARNING in the portal). Discriminate by
   families' cooldowns are left to expire on their own — a flowing observation says
   nothing about the events endpoint's rate limiter.
 
-**`Retry-After` (companion change in er-client):** verified that erclient
+**`Retry-After` (companion change in er-client) — superseded, see the
+SUPERSEDED DETAILS addendum at the top (shipped as er-client 1.16.0):** verified that erclient
 **v1.15.0 (latest, released 2026-03-20) does not capture the header** — exceptions
 carry only `message`/`status_code`/`response_body`. Companion PR to er-client: parse
 `Retry-After` (both seconds and HTTP-date forms) in `_handle_http_status_error` and
@@ -175,7 +176,7 @@ unreachable or overloaded)". The portal already handles
 `DispatcherCustomLog` and INFO never counts toward health thresholds. This answers
 "why is my data delayed" in the activity log without tripping alarms or email.
 
-## Component 4 — erclient pin upgrade
+## Component 4 — erclient pin upgrade (superseded: pin became `earthranger-client==1.16.0` from PyPI, see addendum)
 
 Bump `requirements.in` from the v1.8.0 wheel to **v1.15.0** (and regenerate
 `requirements.txt`). Verify at planning/implementation time that the 1.8.0→1.15.0

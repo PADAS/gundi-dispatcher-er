@@ -112,7 +112,7 @@ async def check_admission(destination_id, stream_type):
         # Fail open on ANY gate malfunction (Redis errors or bugs): throttling
         # is a kindness, not a correctness requirement, and a broken gate must
         # never 500-loop the stream.
-        logger.warning(f"Throttle gate unavailable, admitting message: {e}")
+        logger.warning(f"Throttle gate unavailable, admitting message: {e}", exc_info=True)
         return
     logger.info(
         f"Message deferred by throttle gate. destination_id={destination_id}, "
@@ -184,7 +184,7 @@ def record_distress(destination_id, stream_type, status_code=None, error=None, r
         # Fail open on ANY error (Redis or bugs, e.g. a malformed retry_after):
         # this runs inside the dispatch failure handler, and an escaping
         # exception here would suppress the failure event for the portal.
-        logger.warning(f"Could not record destination distress: {e}")
+        logger.warning(f"Could not record destination distress: {e}", exc_info=True)
         return None
 
 
@@ -206,4 +206,4 @@ def record_success(destination_id, stream_type):
     except Exception as e:
         # Fail open: an escaping exception here would turn a SUCCESSFUL
         # delivery into a retry (duplicate data at the destination)
-        logger.warning(f"Could not clear throttle state after successful delivery: {e}")
+        logger.warning(f"Could not clear throttle state after successful delivery: {e}", exc_info=True)
