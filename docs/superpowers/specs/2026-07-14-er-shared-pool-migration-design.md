@@ -62,8 +62,9 @@ Confirmed mechanics this design builds on:
 `cdip_admin` settings. Empty string means "feature disabled" — the
 new-integration default and the migration command both refuse to act when
 unset (prevents accidentally pointing integrations at a nonexistent topic in
-environments that lack a shared pool). Prod value:
-`root-earthran-cUk0aiO-topic`.
+environments that lack a shared pool). Values: `destination-earthranger-prod` /
+`destination-earthranger-stage` (standardized names; the legacy auto-named
+prod topic is cut over per the "Topic standardization" section).
 
 ## Component 2 — New-integration default (portal)
 
