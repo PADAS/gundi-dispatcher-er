@@ -23,10 +23,10 @@ Confirmed mechanics this design builds on:
   `destination-<id>-<env>`. Flipping the field moves traffic within routing's
   config-cache TTL.
 - Routing already publishes event updates with `ordering_key = gundi_id`
-  (`app/services/event_handlers.py:150`) — per-object ordering on a shared
+  (`cdip-routing/app/services/event_handlers.py:150`) — per-object ordering on a shared
   topic works if the subscription enables message ordering.
 - `DispatcherDeployment` deletion tears down the function, **its recorded
-  topic**, and its subscription (`deployments/tasks.py:382`) — deleting a
+  topic**, and its subscription (`cdip/cdip_admin/deployments/tasks.py:382`) — deleting a
   deployment whose `topic_name` is the shared topic would destroy the shared
   pipeline. Any teardown path must assert against this.
 - The `dispatchers` management command's `--update-source`/`--list-unused`

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Django 4.x + django-environ (cdip portal), google-cloud-pubsub (drain check), pytest + pytest-mock with the deployments app's existing conventions (`@override_settings(GCP_ENVIRONMENT_ENABLED=True)`, mocked deploy task, `transaction.on_commit` patched to immediate).
 
-**Spec:** `gundi-dispatcher-er/docs/superpowers/specs/2026-07-14-er-shared-pool-migration-design.md`
+**Spec:** `docs/superpowers/specs/2026-07-14-er-shared-pool-migration-design.md`
 
 ## Global Constraints
 
