@@ -38,8 +38,12 @@ Confirmed mechanics this design builds on:
 
 - **Topology:** ONE shared root topic + one shared ER dispatcher deployment,
   horizontally scaled. Fairness comes from the shipped throttling layer.
-  Production shared topic: **`root-earthran-cUk0aiO-topic`** (stage has its own;
-  both provided via settings, never hardcoded).
+- **Standardized topic naming (decided 2026-07-14):**
+  **`destination-earthranger-{env}`** (matching the Movebank shared-pool
+  precedent, `destination-movebank-{env}`). The current production topic
+  `root-earthran-cUk0aiO-topic` was auto-named via a placeholder integration
+  and is **transitional** — see "Topic standardization & legacy cutover"
+  below. Values provided via settings/helm, never hardcoded.
 - **New ER destinations default to the shared pool.** A dedicated dispatcher is
   an explicit opt-in special case (`additional["dedicated_dispatcher"] = true`).
   **No current integrations are dedicated keepers** — the flag exists as a
@@ -131,6 +135,38 @@ already-shared-topic integration as "migrated at unknown time", stamps
 cooling period like everyone else. (Their functions have already been dormant,
 but a uniform rule beats a special case; if faster cleanup is wanted, the
 operator can pass `--integration` explicitly after verifying dormancy.)
+
+## Topic standardization & legacy cutover (production)
+
+The existing prod shared topic (`root-earthran-cUk0aiO-topic`) was created as
+a side effect of a placeholder integration, whose `DispatcherDeployment`
+records the shared topic as its own `topic_name` — a standing hazard: any
+deletion of that placeholder's deployment deletes the shared topic. The
+standardization retires both the ad-hoc name and the hazard:
+
+1. **Create** `destination-earthranger-prod` and a push subscription pointing
+   at the existing shared dispatcher service (same subscription config as the
+   current shared subscription; `enable_message_ordering=True`). Stage gets
+   `destination-earthranger-stage` from day one — no legacy step there.
+2. **Point the setting at the standardized name** (helm values). From here,
+   new ER destinations and `--migrate-to-shared` use the new topic.
+3. **Re-point the hand-migrated integrations** (one-off shell, deliberately
+   NOT `--migrate-to-shared`, which would stamp the legacy shared topic as
+   `pre_migration_topic` and muddy rollback semantics):
+
+   ```python
+   OLD, NEW = "root-earthran-cUk0aiO-topic", "destination-earthranger-prod"
+   from integrations.models import Integration
+   for i in Integration.objects.filter(additional__topic=OLD):
+       Integration.objects.filter(pk=i.pk).update(additional={**i.additional, "topic": NEW})
+   ```
+
+4. **Retire the legacy topic**: once the Monitoring drain check reads zero on
+   the old subscription, the placeholder integration's deployment is
+   reclaimable through the normal teardown path — with the setting now on the
+   NEW name, the shared-topic guard no longer shields the old topic, and the
+   teardown task deletes the old topic + subscription by design. Delete the
+   placeholder integration last.
 
 ## Pre-flight requirements (before the first batch)
 
