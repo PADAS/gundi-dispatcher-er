@@ -68,7 +68,7 @@ prod topic is cut over per the "Topic standardization" section).
 
 ## Component 2 — New-integration default (portal)
 
-In `Integration._post_save` (create path, `models.py:~285`), for
+In `Integration._post_save` (create path, `cdip/cdip_admin/integrations/models/v2/models.py:~285`), for
 `self.is_er_site`:
 
 - If `settings.ER_SHARED_DISPATCHER_TOPIC` is set and NOT

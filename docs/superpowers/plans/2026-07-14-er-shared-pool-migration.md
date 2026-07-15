@@ -14,11 +14,11 @@
 
 - Repo: `/Users/chrisdo/padas/cdip`, branch `feature/er-shared-pool-migration` created from up-to-date `origin/main` (`git fetch origin && git checkout -b feature/er-shared-pool-migration origin/main`).
 - Tests: `cd /Users/chrisdo/padas/cdip/cdip_admin && DB_HOST=localhost DB_PORT=5432 DB_NAME=cdip_portaldb DB_USER=cdip_dbuser DB_PASSWORD=cdip_dbpassword ../.venv/bin/pytest <target>`. Requires the `cdip-postgres` container (`docker compose up -d postgres` from the repo root) and, if any event-consumer tests get pulled in, redis on 30091 (`docker run -d --name cdip-redis-30091 -p 30091:6379 redis:7-alpine`; remove it afterwards).
-- Setting name exactly `ER_SHARED_DISPATCHER_TOPIC`; empty string (the default) means **feature disabled** — the new-integration default AND all three command verbs must refuse/skip when it is unset. Prod value (set at rollout, not in code): `root-earthran-cUk0aiO-topic`.
+- Setting name exactly `ER_SHARED_DISPATCHER_TOPIC`; empty string (the default) means **feature disabled** — the new-integration default AND all three command verbs must refuse/skip when it is unset. Setting value (at rollout, not in code): standardized `destination-earthranger-{env}` (`-stage`, then `-prod`); the legacy auto-named `root-earthran-cUk0aiO-topic` is cut over to the standardized prod name per the spec's cutover section.
 - Opt-out flag exactly `additional["dedicated_dispatcher"]` (truthy = keep per-destination behavior).
 - Bookkeeping keys exactly `additional["pre_migration_topic"]` and `additional["shared_pool_migrated_at"]` (ISO-8601 UTC string).
 - Cooling period: `SHARED_POOL_COOLING_DAYS = 7` module constant; `--cooling-days` CLI override allowed everywhere but logged loudly.
-- Teardown safety (verbatim from spec): assert `deployment.topic_name != ER_SHARED_DISPATCHER_TOPIC` before any deletion — deployment deletion deletes its recorded topic (`deployments/tasks.py:382`).
+- Teardown safety (verbatim from spec): assert `deployment.topic_name != ER_SHARED_DISPATCHER_TOPIC` before any deletion — deployment deletion deletes its recorded topic (`cdip/cdip_admin/deployments/tasks.py:382`).
 - `_post_save` writes to `additional` must use `Integration.objects.filter(pk=...).update(...)` — never `self.save()` (save-signal recursion).
 - FK detach before teardown must use queryset `.update(integration=None)` (no save signals → no redeploy trigger).
 - SMART / WPS Watch / TrapTagger behavior unchanged; v1 (`OutboundIntegrationConfiguration`) behavior unchanged.
@@ -796,4 +796,4 @@ Expected: ALL PASS.
 
 - [ ] **Step 2: Report**
 
-Summarize: branch, commits, and the rollout reminder from the spec — set `ER_SHARED_DISPATCHER_TOPIC` in stage first and run the full migrate → verify → (compressed `--cooling-days`) → teardown cycle there; prod value is `root-earthran-cUk0aiO-topic`; pre-flight items (Redis parity between fleets, portal-trace fallback bug, shared subscription ordering) are operational checks outside this code change.
+Summarize: branch, commits, and the rollout reminder from the spec — set `ER_SHARED_DISPATCHER_TOPIC` in stage first and run the full migrate → verify → (compressed `--cooling-days`) → teardown cycle there; prod value is `destination-earthranger-prod` (standardized; legacy topic cut over per the spec); pre-flight items (Redis parity between fleets, portal-trace fallback bug, shared subscription ordering) are operational checks outside this code change.
