@@ -3,13 +3,14 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from erclient import AsyncERClient
+from erclient.er_errors import ERClientBadCredentials
 from typing import Union, List
 from urllib.parse import urlparse
 from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 
 from core.utils import find_config_for_action
-from core.er_auth import TokenCachingAsyncERClient
+from core.er_auth import TokenCachingAsyncERClient, invalidate_cached_token
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +202,29 @@ class ERDispatcherV2(DispatcherV2, ABC):
         for start_index in range(0, num_obs, batch_size):
             yield data[start_index : min(start_index + batch_size, num_obs)]
 
+    async def send(self, data, **kwargs):
+        try:
+            return await self._send(data, **kwargs)
+        except ERClientBadCredentials:
+            logger.warning(
+                "ER rejected the auth token (401). Invalidating cached token and retrying once.",
+                extra={"integration_id": str(self.integration.id)},
+            )
+            invalidate_cached_token(self.er_client.token_url, self.er_client.username)
+            # The failed _send closed the client's http session; build a fresh one.
+            self.er_client = self.make_er_client(
+                integration=self.integration, provider=self.provider
+            )
+            return await self._send(data, **kwargs)
+
+    @abstractmethod
+    async def _send(self, data, **kwargs):
+        ...
+
 
 class EREventDispatcher(ERDispatcherV2):
 
-    async def send(self, event: schemas.v2.EREvent, **kwargs):
+    async def _send(self, event: schemas.v2.EREvent, **kwargs):
         async with self.er_client as client:
             try:
                 event_cleaned = json.loads(event.json(exclude_none=True, exclude_unset=True))
@@ -218,7 +238,7 @@ class EREventDispatcher(ERDispatcherV2):
 
 class EREventUpdateDispatcher(ERDispatcherV2):
 
-    async def send(self, event_update: schemas.v2.EREventUpdate, **kwargs):
+    async def _send(self, event_update: schemas.v2.EREventUpdate, **kwargs):
         async with self.er_client as client:
             try:
                 er_event_id = kwargs.get("external_id")
@@ -241,7 +261,7 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
         super().__init__(integration=integration, **kwargs)
         self.cloud_storage = get_cloud_storage()
 
-    async def send(self, attachment_payload: schemas.v2.ERAttachment, **kwargs):
+    async def _send(self, attachment_payload: schemas.v2.ERAttachment, **kwargs):
         result = None
         related_observation = kwargs.get("related_observation")
         if not related_observation:
@@ -265,7 +285,7 @@ class EREventAttachmentDispatcher(ERDispatcherV2):
 
 class ERObservationDispatcher(ERDispatcherV2):
 
-    async def send(self, observation: schemas.v2.ERObservation, **kwargs):
+    async def _send(self, observation: schemas.v2.ERObservation, **kwargs):
         async with self.er_client as client:
             try:
                 observation_cleaned = json.loads(observation.json(exclude_none=True, exclude_unset=True))
@@ -277,7 +297,7 @@ class ERObservationDispatcher(ERDispatcherV2):
 
 class ERMessageDispatcher(ERDispatcherV2):
 
-    async def send(self, message: schemas.v2.ERMessage, **kwargs):
+    async def _send(self, message: schemas.v2.ERMessage, **kwargs):
         async with self.er_client as client:
             try:
                 manufacturer_id = message.manufacturer_id

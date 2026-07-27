@@ -5,6 +5,7 @@ import pytest
 from gundi_core.events import dispatchers as dispatcher_events
 from erclient import er_errors
 from core import settings
+from core import dispatchers
 from core.dispatchers import (
     EREventDispatcher,
     EREventAttachmentDispatcher,
@@ -166,3 +167,96 @@ async def test_dispatch_transformed_observation_v2_publishes_event_on_errors(
     assert payload.error
     assert payload.server_response_status
     assert payload.server_response_body
+
+
+def _make_erclient_mock_for_auth_retry(mocker, post_method_name, side_effect):
+    erclient_mock = mocker.MagicMock()
+    setattr(erclient_mock, post_method_name, mocker.AsyncMock(side_effect=side_effect))
+    erclient_mock.__aenter__ = mocker.AsyncMock(return_value=erclient_mock)
+    erclient_mock.__aexit__ = mocker.AsyncMock(return_value=None)
+    erclient_mock.close = mocker.AsyncMock(return_value=None)
+    erclient_mock.token_url = "https://fake-site.pamdas.org/oauth2/token"
+    erclient_mock.username = "fake-username"
+    return erclient_mock
+
+
+@pytest.mark.asyncio
+async def test_v2_dispatcher_retries_send_once_on_bad_credentials(
+    mocker,
+    mock_cache_empty,
+    mock_er_bad_credentials_error,
+    post_report_response,
+    destination_integration_v2,
+    event_v2_transformed_er,
+):
+    mocker.patch("core.er_auth._cache_db", mock_cache_empty)
+    erclient_mock = _make_erclient_mock_for_auth_retry(
+        mocker, "post_report", [mock_er_bad_credentials_error, post_report_response]
+    )
+    mocked_erclient_class = mocker.MagicMock(return_value=erclient_mock)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mocked_erclient_class)
+    dispatcher = dispatchers.EREventDispatcher(
+        integration=destination_integration_v2, provider="fake-provider"
+    )
+
+    result = await dispatcher.send(event_v2_transformed_er.payload)
+
+    assert result == post_report_response
+    assert erclient_mock.post_report.await_count == 2
+    mock_cache_empty.delete.assert_called_once()  # cached token invalidated
+    assert mocked_erclient_class.call_count == 2  # client rebuilt for the retry
+
+
+@pytest.mark.asyncio
+async def test_v2_dispatcher_raises_on_second_bad_credentials(
+    mocker,
+    mock_cache_empty,
+    mock_er_bad_credentials_error,
+    destination_integration_v2,
+    event_v2_transformed_er,
+):
+    mocker.patch("core.er_auth._cache_db", mock_cache_empty)
+    erclient_mock = _make_erclient_mock_for_auth_retry(
+        mocker,
+        "post_report",
+        [mock_er_bad_credentials_error, mock_er_bad_credentials_error],
+    )
+    mocker.patch(
+        "core.dispatchers.TokenCachingAsyncERClient",
+        mocker.MagicMock(return_value=erclient_mock),
+    )
+    dispatcher = dispatchers.EREventDispatcher(
+        integration=destination_integration_v2, provider="fake-provider"
+    )
+
+    with pytest.raises(er_errors.ERClientBadCredentials):
+        await dispatcher.send(event_v2_transformed_er.payload)
+
+    assert erclient_mock.post_report.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_v2_dispatcher_does_not_retry_on_permission_denied(
+    mocker,
+    mock_cache_empty,
+    mock_er_missing_permissions_error,
+    destination_integration_v2,
+    event_v2_transformed_er,
+):
+    mocker.patch("core.er_auth._cache_db", mock_cache_empty)
+    erclient_mock = _make_erclient_mock_for_auth_retry(
+        mocker, "post_report", [mock_er_missing_permissions_error]
+    )
+    mocker.patch(
+        "core.dispatchers.TokenCachingAsyncERClient",
+        mocker.MagicMock(return_value=erclient_mock),
+    )
+    dispatcher = dispatchers.EREventDispatcher(
+        integration=destination_integration_v2, provider="fake-provider"
+    )
+
+    with pytest.raises(er_errors.ERClientPermissionDenied):
+        await dispatcher.send(event_v2_transformed_er.payload)
+
+    assert erclient_mock.post_report.await_count == 1
+    mock_cache_empty.delete.assert_not_called()
