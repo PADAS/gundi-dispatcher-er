@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import backoff
@@ -84,6 +84,27 @@ class TokenCachingAsyncERClient(AsyncERClient):
     The refresh-token grant is deliberately never used: refresh rotation is
     racy under concurrency, and a fresh password grant every ~47h is cheap.
     """
+
+    async def auth_headers(self):
+        # Static-token clients and clients that already logged in have valid
+        # auth; a client with a year-2099 expiry (token= kwarg) always hits this.
+        if not self._auth_is_valid():
+            cached = read_cached_token(self.token_url, self.username)
+            if cached:
+                access_token, expires_at = cached
+                min_valid_until = datetime.now(tz=timezone.utc) + timedelta(
+                    seconds=MIN_REMAINING_VALIDITY_SECONDS
+                )
+                if expires_at > min_valid_until:
+                    self.auth = {"token_type": "Bearer", "access_token": access_token}
+                    self.auth_expires = expires_at
+        if not self._auth_is_valid():
+            # No refresh grant here on purpose (see class docstring).
+            await self.login()
+        return {
+            "Authorization": f'{self.auth["token_type"]} {self.auth["access_token"]}',
+            "Accept-Type": "application/json",
+        }
 
     @backoff.on_exception(
         backoff.expo,

@@ -226,3 +226,84 @@ async def test_login_retries_on_network_error(mocker, mock_token_cache, fast_bac
 
     assert client.auth["access_token"] == "new-token"
     assert mock_post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_uses_cached_token_without_login(mocker, mock_token_cache):
+    entry, _ = _cache_entry(token="cached-token", expires_in_hours=47)
+    mock_token_cache.get.return_value = entry
+    client = _make_client()
+    mock_post = mocker.AsyncMock()
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    assert headers["Authorization"] == "Bearer cached-token"
+    mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_logs_in_on_cache_miss(mocker, mock_token_cache):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    assert headers["Authorization"] == "Bearer new-token"
+    assert mock_post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_treats_nearly_expired_cache_entry_as_miss(
+    mocker, mock_token_cache
+):
+    # Valid for 30s — under the 60s minimum remaining validity
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=30)
+    mock_token_cache.get.return_value = json.dumps(
+        {"access_token": "nearly-expired", "expires_at": expires_at.isoformat()}
+    )
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    assert headers["Authorization"] == "Bearer new-token"
+    assert mock_post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_reuses_in_memory_auth_without_touching_cache(
+    mocker, mock_token_cache
+):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    await client.auth_headers()  # first call logs in
+    await client.auth_headers()  # second call reuses self.auth
+
+    assert mock_post.await_count == 1
+    assert mock_token_cache.get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_with_static_token_never_touches_cache(
+    mocker, mock_token_cache
+):
+    client = er_auth.TokenCachingAsyncERClient(
+        service_root="https://fake-site.pamdas.org/api/v1.0",
+        token="static-long-lived-token",
+        token_url=TOKEN_URL,
+        client_id="das_web_client",
+        provider_key="fake-provider",
+    )
+    mock_post = mocker.AsyncMock()
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    assert headers["Authorization"] == "Bearer static-long-lived-token"
+    mock_token_cache.get.assert_not_called()
+    mock_post.assert_not_awaited()
