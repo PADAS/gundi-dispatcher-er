@@ -1,11 +1,14 @@
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from erclient import er_errors
 from redis import exceptions as redis_exceptions
 
 from core import er_auth
+from core.dispatchers import ERDispatcher, ERDispatcherV2, ERPositionDispatcher
 
 TOKEN_URL = "https://fake-site.pamdas.org/oauth2/token"
 USERNAME = "gundi_serviceaccount"
@@ -360,12 +363,6 @@ async def test_auth_headers_discards_cached_token_with_null_access_token(
     assert mock_post.await_count == 1
 
 
-from types import SimpleNamespace
-from erclient import er_errors
-
-from core.dispatchers import ERDispatcher, ERDispatcherV2, ERPositionDispatcher
-
-
 def test_make_er_client_v1_returns_token_caching_client():
     config = SimpleNamespace(
         endpoint="https://fake-site.pamdas.org",
@@ -382,6 +379,29 @@ def test_make_er_client_v2_returns_token_caching_client(destination_integration_
         integration=destination_integration_v2, provider="fake-provider"
     )
     assert isinstance(client, er_auth.TokenCachingAsyncERClient)
+
+
+def test_make_er_client_v1_normalizes_http_token_url_to_https():
+    config = SimpleNamespace(
+        endpoint="http://fake-site.pamdas.org",
+        login=USERNAME,
+        password="fake-password",
+        token=None,
+    )
+    client = ERDispatcher.make_er_client(config, "fake-provider")
+    assert client.service_root == "https://fake-site.pamdas.org/api/v1.0"
+    assert client.token_url == "https://fake-site.pamdas.org/oauth2/token"
+
+
+def test_make_er_client_v2_normalizes_http_token_url_to_https(destination_integration_v2):
+    integration = destination_integration_v2.copy(
+        update={"base_url": "http://gundi-load-testing.pamdas.org"}
+    )
+    client = ERDispatcherV2.make_er_client(
+        integration=integration, provider="fake-provider"
+    )
+    assert client.service_root == "https://gundi-load-testing.pamdas.org/api/v1.0"
+    assert client.token_url == "https://gundi-load-testing.pamdas.org/oauth2/token"
 
 
 @pytest.mark.asyncio
