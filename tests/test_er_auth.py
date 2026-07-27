@@ -327,3 +327,26 @@ async def test_auth_headers_discards_cached_token_with_naive_expires_at(
     # Should have logged in with fresh token, not used the naive one
     assert headers["Authorization"] == "Bearer new-token"
     assert mock_post.await_count == 1
+
+
+from types import SimpleNamespace
+
+from core.dispatchers import ERDispatcher, ERDispatcherV2
+
+
+def test_make_er_client_v1_returns_token_caching_client():
+    config = SimpleNamespace(
+        endpoint="https://fake-site.pamdas.org",
+        login=USERNAME,
+        password="fake-password",
+        token=None,
+    )
+    client = ERDispatcher.make_er_client(config, "fake-provider")
+    assert isinstance(client, er_auth.TokenCachingAsyncERClient)
+
+
+def test_make_er_client_v2_returns_token_caching_client(destination_integration_v2):
+    client = ERDispatcherV2.make_er_client(
+        integration=destination_integration_v2, provider="fake-provider"
+    )
+    assert isinstance(client, er_auth.TokenCachingAsyncERClient)

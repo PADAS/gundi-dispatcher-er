@@ -30,7 +30,7 @@ async def _test_dispatcher_on_errors(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class_with_error)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class_with_error)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
 
     # Check that the dispatcher raises an exception so the message is retried later
@@ -142,7 +142,7 @@ async def test_dispatch_transformed_observation_v2_publishes_event_on_errors(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class_with_error)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class_with_error)
     mocker.patch("core.event_handlers.publish_event", mock_publish_event)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
 

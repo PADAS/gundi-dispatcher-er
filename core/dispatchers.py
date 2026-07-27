@@ -9,6 +9,7 @@ from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 
 from core.utils import find_config_for_action
+from core.er_auth import TokenCachingAsyncERClient
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class ERDispatcher(Dispatcher, ABC):
 
     def __init__(self, config: schemas.OutboundConfiguration, provider: str):
         super().__init__(config)
+        self.provider = provider
         self.er_client = self.make_er_client(config, provider)
         # self.load_batch_size = 1000
 
@@ -48,7 +50,7 @@ class ERDispatcher(Dispatcher, ABC):
         if scheme == "http":
             scheme = "https"
 
-        return AsyncERClient(
+        return TokenCachingAsyncERClient(
             service_root=f"{scheme}://{netloc}/api/v1.0",
             username=config.login,
             password=config.password,
@@ -182,7 +184,7 @@ class ERDispatcherV2(DispatcherV2, ABC):
                 f"Authentication settings for integration {str(integration.id)} are missing. Please fix the integration setup in the portal."
             )
         auth_config = schemas.v2.ERAuthActionConfig.parse_obj(integration_action_config.data)
-        return AsyncERClient(
+        return TokenCachingAsyncERClient(
             service_root=f"{scheme}://{netloc}/api/v1.0",
             username=auth_config.username,
             password=auth_config.password,
