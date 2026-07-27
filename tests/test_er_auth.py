@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 
+import httpx
 import pytest
 from redis import exceptions as redis_exceptions
 
@@ -105,3 +106,123 @@ def test_invalidate_cached_token_swallows_redis_error(mocker):
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
     er_auth.invalidate_cached_token(TOKEN_URL, USERNAME)  # must not raise
+
+
+def _make_client():
+    return er_auth.TokenCachingAsyncERClient(
+        service_root="https://fake-site.pamdas.org/api/v1.0",
+        username=USERNAME,
+        password="fake-password",
+        token_url=TOKEN_URL,
+        client_id="das_web_client",
+        provider_key="fake-provider",
+    )
+
+
+def _token_response(status_code=200):
+    request = httpx.Request("POST", TOKEN_URL)
+    if status_code == 200:
+        return httpx.Response(
+            200,
+            json={
+                "access_token": "new-token",
+                "refresh_token": "fake-refresh-token",
+                "expires_in": 172800,
+                "token_type": "Bearer",
+            },
+            request=request,
+        )
+    return httpx.Response(status_code, json={"error": "error"}, request=request)
+
+
+@pytest.fixture
+def mock_token_cache(mocker):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = None
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    return mock_cache
+
+
+@pytest.fixture
+def fast_backoff(mocker):
+    # backoff awaits asyncio.sleep between retries; skip the real waits
+    return mocker.patch("asyncio.sleep", mocker.AsyncMock())
+
+
+@pytest.mark.asyncio
+async def test_login_success_sets_auth_and_writes_cache(mocker, mock_token_cache):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    await client.login()
+
+    assert client.auth["access_token"] == "new-token"
+    args, _ = mock_token_cache.setex.call_args
+    key, ttl, entry = args
+    assert key == EXPECTED_CACHE_KEY
+    assert json.loads(entry)["access_token"] == "new-token"
+    # erclient subtracts a 5-minute margin from expires_in (48h)
+    assert 0 < ttl <= 172800 - 5 * 60
+
+
+@pytest.mark.asyncio
+async def test_login_retries_on_transient_500_then_succeeds(
+    mocker, mock_token_cache, fast_backoff
+):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(
+        side_effect=[_token_response(500), _token_response(500), _token_response(200)]
+    )
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    await client.login()
+
+    assert client.auth["access_token"] == "new-token"
+    assert mock_post.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_login_raises_after_max_retries_on_persistent_500(
+    mocker, mock_token_cache, fast_backoff
+):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(500))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.login()
+
+    assert mock_post.await_count == 3
+    mock_token_cache.setex.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_login_does_not_retry_on_bad_credentials_400(
+    mocker, mock_token_cache, fast_backoff
+):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(400))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.login()
+
+    assert mock_post.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_login_retries_on_network_error(mocker, mock_token_cache, fast_backoff):
+    client = _make_client()
+    mock_post = mocker.AsyncMock(
+        side_effect=[
+            httpx.ConnectError("connection refused", request=httpx.Request("POST", TOKEN_URL)),
+            _token_response(200),
+        ]
+    )
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    await client.login()
+
+    assert client.auth["access_token"] == "new-token"
+    assert mock_post.await_count == 2

@@ -3,6 +3,10 @@ import logging
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+import backoff
+import httpx
+from erclient import AsyncERClient
+
 from core.utils import get_redis_db
 
 logger = logging.getLogger(__name__)
@@ -59,3 +63,39 @@ def invalidate_cached_token(token_url, username):
         _cache_db.delete(_token_cache_key(token_url, username))
     except Exception as e:
         logger.warning(f"Error deleting ER auth token from cache: {e}")
+
+
+def _is_permanent_login_error(exception):
+    """4xx from the token endpoint (bad credentials/request) — do not retry."""
+    return (
+        isinstance(exception, httpx.HTTPStatusError)
+        and exception.response.status_code < 500
+    )
+
+
+class TokenCachingAsyncERClient(AsyncERClient):
+    """
+    AsyncERClient that shares password-grant tokens across dispatcher
+    invocations via Redis, instead of logging in per instance.
+
+    ER's /oauth2/token endpoint has a concurrency bug (django-oauth-toolkit
+    #995/#960) triggered by simultaneous password grants for the same user,
+    so logins are also retried with backoff on transient failures.
+    The refresh-token grant is deliberately never used: refresh rotation is
+    racy under concurrency, and a fresh password grant every ~47h is cheap.
+    """
+
+    @backoff.on_exception(
+        backoff.expo,
+        (httpx.HTTPStatusError, httpx.RequestError),
+        max_tries=LOGIN_MAX_TRIES,
+        max_time=LOGIN_MAX_TIME_SECONDS,
+        giveup=_is_permanent_login_error,
+        logger=logger,
+    )
+    async def login(self):
+        result = await super().login()
+        write_cached_token(
+            self.token_url, self.username, self.auth["access_token"], self.auth_expires
+        )
+        return result
