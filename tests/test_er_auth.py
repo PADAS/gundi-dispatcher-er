@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from cryptography.fernet import Fernet
 from erclient import er_errors
 from redis import exceptions as redis_exceptions
 
@@ -20,10 +22,21 @@ EXPECTED_CACHE_KEY = (
 )
 
 
+def _entry_cipher(username=USERNAME, password=PASSWORD, cache_secret=""):
+    key_material = hashlib.sha256(
+        f"{cache_secret}:fake-site.pamdas.org:{username}:{password}".encode()
+    ).digest()
+    return Fernet(base64.urlsafe_b64encode(key_material))
+
+
+def _encrypt_entry(payload):
+    return _entry_cipher().encrypt(payload.encode())
+
+
 def _cache_entry(token="cached-token", expires_in_hours=47):
     expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=expires_in_hours)
     return (
-        json.dumps({"access_token": token, "expires_at": expires_at.isoformat()}),
+        _encrypt_entry(json.dumps({"access_token": token, "expires_at": expires_at.isoformat()})),
         expires_at,
     )
 
@@ -67,9 +80,9 @@ def test_read_cached_token_returns_none_on_corrupt_entry(mocker):
 def test_read_cached_token_returns_none_on_null_access_token(mocker):
     expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
     mock_cache = mocker.MagicMock()
-    mock_cache.get.return_value = json.dumps(
+    mock_cache.get.return_value = _encrypt_entry(json.dumps(
         {"access_token": None, "expires_at": expires_at.isoformat()}
-    )
+    ))
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
     assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
@@ -86,7 +99,7 @@ def test_write_cached_token_sets_entry_with_ttl(mocker):
     key, ttl, entry = args
     assert key == EXPECTED_CACHE_KEY
     assert 990 <= ttl <= 1000
-    parsed = json.loads(entry)
+    parsed = json.loads(_entry_cipher().decrypt(entry))
     assert parsed["access_token"] == "new-token"
     assert parsed["expires_at"] == expires_at.isoformat()
 
@@ -142,6 +155,49 @@ def test_cached_token_is_not_shared_across_different_passwords(mocker):
     assert er_auth.read_cached_token(TOKEN_URL, USERNAME, "wrong-password") is None
 
 
+def test_cached_entry_is_stored_encrypted(mocker):
+    mock_cache = mocker.MagicMock()
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "secret-token", expires_at)
+
+    args, _ = mock_cache.setex.call_args
+    stored = args[2]
+    stored_text = stored.decode() if isinstance(stored, bytes) else stored
+    assert "secret-token" not in stored_text
+    assert "access_token" not in stored_text
+
+
+def test_legacy_plaintext_entry_is_treated_as_miss(mocker):
+    # Entries written before encryption (plain JSON) must be discarded, not crash.
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = json.dumps(
+        {"access_token": "legacy-token", "expires_at": expires_at.isoformat()}
+    )
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
+
+
+def test_cache_secret_mismatch_is_a_miss(mocker):
+    fake_store = {}
+    mock_cache = mocker.MagicMock()
+    mock_cache.setex.side_effect = lambda key, ttl, value: fake_store.__setitem__(key, value)
+    mock_cache.get.side_effect = fake_store.get
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+
+    mocker.patch.object(er_auth.settings, "ER_TOKEN_CACHE_SECRET", "secret-a")
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "secret-token", expires_at)
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) == ("secret-token", expires_at)
+
+    # A deployment with a different (or missing) cache secret cannot use the entry.
+    mocker.patch.object(er_auth.settings, "ER_TOKEN_CACHE_SECRET", "secret-b")
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
+
+
 def _make_client():
     return er_auth.TokenCachingAsyncERClient(
         service_root="https://fake-site.pamdas.org/api/v1.0",
@@ -195,7 +251,7 @@ async def test_login_success_sets_auth_and_writes_cache(mocker, mock_token_cache
     args, _ = mock_token_cache.setex.call_args
     key, ttl, entry = args
     assert key == EXPECTED_CACHE_KEY
-    assert json.loads(entry)["access_token"] == "new-token"
+    assert json.loads(_entry_cipher().decrypt(entry))["access_token"] == "new-token"
     # erclient subtracts a 5-minute margin from expires_in (48h)
     assert 0 < ttl <= 172800 - 5 * 60
 
@@ -294,9 +350,9 @@ async def test_auth_headers_treats_nearly_expired_cache_entry_as_miss(
 ):
     # Valid for 30s — under the 60s minimum remaining validity
     expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=30)
-    mock_token_cache.get.return_value = json.dumps(
+    mock_token_cache.get.return_value = _encrypt_entry(json.dumps(
         {"access_token": "nearly-expired", "expires_at": expires_at.isoformat()}
-    )
+    ))
     client = _make_client()
     mock_post = mocker.AsyncMock(return_value=_token_response(200))
     mocker.patch.object(client._http_session, "post", mock_post)
@@ -349,9 +405,9 @@ async def test_auth_headers_discards_cached_token_with_naive_expires_at(
 ):
     # Cache entry with naive datetime (no UTC offset) — should be treated as invalid
     naive_expires_at = datetime.now() + timedelta(hours=47)
-    mock_token_cache.get.return_value = json.dumps(
+    mock_token_cache.get.return_value = _encrypt_entry(json.dumps(
         {"access_token": "naive-token", "expires_at": naive_expires_at.isoformat()}
-    )
+    ))
     client = _make_client()
     mock_post = mocker.AsyncMock(return_value=_token_response(200))
     mocker.patch.object(client._http_session, "post", mock_post)
@@ -369,9 +425,9 @@ async def test_auth_headers_discards_cached_token_with_null_access_token(
 ):
     # Cache entry with a null access_token — should be treated as invalid
     expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
-    mock_token_cache.get.return_value = json.dumps(
+    mock_token_cache.get.return_value = _encrypt_entry(json.dumps(
         {"access_token": None, "expires_at": expires_at.isoformat()}
-    )
+    ))
     client = _make_client()
     mock_post = mocker.AsyncMock(return_value=_token_response(200))
     mocker.patch.object(client._http_session, "post", mock_post)

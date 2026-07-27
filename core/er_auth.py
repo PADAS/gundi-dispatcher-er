@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import json
 import logging
@@ -6,8 +7,10 @@ from urllib.parse import urlparse
 
 import backoff
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 from erclient import AsyncERClient
 
+from core import settings
 from core.utils import get_redis_db
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,19 @@ def _token_cache_key(token_url, username, password):
     return f"{TOKEN_CACHE_KEY_PREFIX}.{host}.{username}.{credential_fingerprint}"
 
 
+def _entry_cipher(token_url, username, password):
+    # Entries are encrypted under a key derived from the credentials the
+    # legitimate reader must already hold (plus an optional deployment
+    # secret), so Redis contents alone are neither readable nor forgeable.
+    # ER_TOKEN_CACHE_SECRET is read at call time so all deployments sharing
+    # the cache must present the same value.
+    host = urlparse(token_url).hostname or token_url
+    key_material = hashlib.sha256(
+        f"{settings.ER_TOKEN_CACHE_SECRET}:{host}:{username}:{password}".encode()
+    ).digest()
+    return Fernet(base64.urlsafe_b64encode(key_material))
+
+
 def read_cached_token(token_url, username, password):
     """Return (access_token, expires_at) from the cache, or None. Never raises."""
     try:
@@ -40,7 +56,8 @@ def read_cached_token(token_url, username, password):
     if not raw_entry:
         return None
     try:
-        entry = json.loads(raw_entry)
+        decrypted_entry = _entry_cipher(token_url, username, password).decrypt(raw_entry)
+        entry = json.loads(decrypted_entry)
         access_token = entry["access_token"]
         expires_at = datetime.fromisoformat(entry["expires_at"])
         if not access_token:
@@ -50,8 +67,10 @@ def read_cached_token(token_url, username, password):
             logger.warning(f"Discarding invalid ER auth token cache entry: naive expires_at")
             return None
         return access_token, expires_at
-    except (ValueError, KeyError, TypeError) as e:
-        logger.warning(f"Discarding invalid ER auth token cache entry: {e}")
+    except (InvalidToken, ValueError, KeyError, TypeError) as e:
+        # InvalidToken covers undecryptable entries: tampered data, a legacy
+        # plaintext entry, or a cache-secret/credential mismatch.
+        logger.warning(f"Discarding invalid ER auth token cache entry: {type(e).__name__} {e}")
         return None
 
 
@@ -60,8 +79,10 @@ def write_cached_token(token_url, username, password, access_token, expires_at):
     ttl_seconds = int((expires_at - datetime.now(tz=timezone.utc)).total_seconds())
     if ttl_seconds <= 0:
         return
-    entry = json.dumps(
-        {"access_token": access_token, "expires_at": expires_at.isoformat()}
+    entry = _entry_cipher(token_url, username, password).encrypt(
+        json.dumps(
+            {"access_token": access_token, "expires_at": expires_at.isoformat()}
+        ).encode()
     )
     try:
         _cache_db.setex(_token_cache_key(token_url, username, password), ttl_seconds, entry)

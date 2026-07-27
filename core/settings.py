@@ -42,6 +42,13 @@ REDIS_HOST = env.str("REDIS_HOST", "localhost")
 REDIS_PORT = env.int("REDIS_PORT", 6379)
 REDIS_DB = env.int("REDIS_DB", 3)
 
+# Optional secret mixed into the ER auth-token cache encryption key.
+# When set (use the same value across all dispatcher deployments sharing the
+# Redis), cached tokens cannot be decrypted or brute-forced from Redis
+# contents alone. When empty, the key is derived from the integration
+# credentials only.
+ER_TOKEN_CACHE_SECRET = env.str("ER_TOKEN_CACHE_SECRET", "")
+
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 DISPATCHED_OBSERVATIONS_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60 * 60)  # 1 Hour

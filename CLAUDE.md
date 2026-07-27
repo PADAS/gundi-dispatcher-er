@@ -82,7 +82,7 @@ Deploys a gen2 Cloud Function in `us-central1` triggered by `google.cloud.pubsub
 - Portal config lookups (outbound configs, inbound integrations, v2 Integration details) are cached for `PORTAL_CONFIG_OBJECT_CACHE_TTL` (default 60s).
 - Dispatched v2 observations are cached for `DISPATCHED_OBSERVATIONS_CACHE_TTL` (default 1h) keyed by `gundi_id` + `destination_id` — required for event-update and attachment flows.
 - Cache reads/writes are wrapped in `read_config_from_cache_safe`/`write_config_in_cache_safe` so Redis connection issues log a warning and fall through to the portal API rather than erroring.
-- ER auth tokens from password grants are cached under `er_dispatcher.auth_token.{host}.{username}.{credential-fingerprint}` (fingerprint = `sha256(username:password)[:16]`, so a wrong password is always a cache miss) with TTL matching token expiry (~48h), so dispatch does not perform an OAuth2 grant per message. Static-token integrations bypass this cache.
+- ER auth tokens from password grants are cached under `er_dispatcher.auth_token.{host}.{username}.{credential-fingerprint}` (fingerprint = `sha256(username:password)[:16]`, so a wrong password is always a cache miss) with TTL matching token expiry (~48h), so dispatch does not perform an OAuth2 grant per message. Entries are Fernet-encrypted under a key derived from the credentials plus the optional `ER_TOKEN_CACHE_SECRET` env var — Redis contents alone can't be read or forged; undecryptable entries are discarded as misses. Static-token integrations bypass this cache.
 
 ### Tracing
 

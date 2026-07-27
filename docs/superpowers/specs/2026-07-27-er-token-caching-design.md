@@ -55,9 +55,15 @@ helpers for the Redis cache.
   `sha256(f"{username}:{password}")[:16]` — binding the entry to the full
   credential pair so a client presenting the right username but a wrong
   password misses the cache and goes through a real (validating) grant.
-  Value: JSON `{"access_token": "...", "expires_at": "<ISO-8601 UTC>"}`.
-  Redis TTL set to `expires_at - now`. Uses the existing
-  `core.utils.get_redis_db()` database.
+  Value: JSON `{"access_token": "...", "expires_at": "<ISO-8601 UTC>"}`,
+  **encrypted at rest** with Fernet under a key derived as
+  `sha256(f"{ER_TOKEN_CACHE_SECRET}:{host}:{username}:{password}")` — Redis
+  contents alone are neither readable nor forgeable; a wrong password or a
+  cache-secret mismatch fails decryption and is treated as a miss. The
+  optional `ER_TOKEN_CACHE_SECRET` env var (same value across deployments
+  sharing the Redis) additionally defeats offline brute-forcing of weak
+  passwords from cache contents. Redis TTL set to `expires_at - now`. Uses
+  the existing `core.utils.get_redis_db()` database.
 - **Safe cache access:** every Redis read/write/delete is wrapped in
   try/except that logs a warning and falls through (mirrors
   `read_config_from_cache_safe`). Redis being down degrades to today's
