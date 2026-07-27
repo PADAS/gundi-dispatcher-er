@@ -51,7 +51,9 @@ class ERDispatcher(Dispatcher, ABC):
                 "ER rejected the auth token (401). Invalidating cached token and retrying once.",
                 extra={"endpoint": self.configuration.endpoint},
             )
-            invalidate_cached_token(self.er_client.token_url, self.er_client.username)
+            invalidate_cached_token(
+                self.er_client.token_url, self.er_client.username, self.er_client.password
+            )
             # The failed _send closed the client's http session; build a fresh one.
             self.er_client = self.make_er_client(self.configuration, self.provider)
             return await self._send(data, **kwargs)
@@ -237,7 +239,9 @@ class ERDispatcherV2(DispatcherV2, ABC):
                 "ER rejected the auth token (401). Invalidating cached token and retrying once.",
                 extra={"integration_id": str(self.integration.id)},
             )
-            invalidate_cached_token(self.er_client.token_url, self.er_client.username)
+            invalidate_cached_token(
+                self.er_client.token_url, self.er_client.username, self.er_client.password
+            )
             # The failed _send closed the client's http session; build a fresh one.
             self.er_client = self.make_er_client(
                 integration=self.integration, provider=self.provider

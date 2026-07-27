@@ -177,6 +177,7 @@ def _make_erclient_mock_for_auth_retry(mocker, post_method_name, side_effect):
     erclient_mock.close = mocker.AsyncMock(return_value=None)
     erclient_mock.token_url = "https://fake-site.pamdas.org/oauth2/token"
     erclient_mock.username = "fake-username"
+    erclient_mock.password = "fake-password"
     return erclient_mock
 
 

@@ -50,10 +50,14 @@ PubSub retry.
 **`TokenCachingAsyncERClient(AsyncERClient)`** — a thin subclass; plus module
 helpers for the Redis cache.
 
-- **Cache key:** `er_dispatcher.auth_token.{host}.{username}` where `host` is
-  the token URL's hostname. Value: JSON
-  `{"access_token": "...", "expires_at": "<ISO-8601 UTC>"}`. Redis TTL set to
-  `expires_at - now`. Uses the existing `core.utils.get_redis_db()` database.
+- **Cache key:** `er_dispatcher.auth_token.{host}.{username}.{fingerprint}`
+  where `host` is the token URL's hostname and `fingerprint` is
+  `sha256(f"{username}:{password}")[:16]` — binding the entry to the full
+  credential pair so a client presenting the right username but a wrong
+  password misses the cache and goes through a real (validating) grant.
+  Value: JSON `{"access_token": "...", "expires_at": "<ISO-8601 UTC>"}`.
+  Redis TTL set to `expires_at - now`. Uses the existing
+  `core.utils.get_redis_db()` database.
 - **Safe cache access:** every Redis read/write/delete is wrapped in
   try/except that logs a warning and falls through (mirrors
   `read_config_from_cache_safe`). Redis being down degrades to today's

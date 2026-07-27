@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -12,7 +13,11 @@ from core.dispatchers import ERDispatcher, ERDispatcherV2, ERPositionDispatcher
 
 TOKEN_URL = "https://fake-site.pamdas.org/oauth2/token"
 USERNAME = "gundi_serviceaccount"
-EXPECTED_CACHE_KEY = "er_dispatcher.auth_token.fake-site.pamdas.org.gundi_serviceaccount"
+PASSWORD = "fake-password"
+_CREDENTIAL_FINGERPRINT = hashlib.sha256(f"{USERNAME}:{PASSWORD}".encode()).hexdigest()[:16]
+EXPECTED_CACHE_KEY = (
+    f"er_dispatcher.auth_token.fake-site.pamdas.org.gundi_serviceaccount.{_CREDENTIAL_FINGERPRINT}"
+)
 
 
 def _cache_entry(token="cached-token", expires_in_hours=47):
@@ -29,7 +34,7 @@ def test_read_cached_token_returns_token_and_expiry_on_hit(mocker):
     mock_cache.get.return_value = entry
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    result = er_auth.read_cached_token(TOKEN_URL, USERNAME)
+    result = er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD)
 
     assert result == ("cached-token", expires_at)
     mock_cache.get.assert_called_once_with(EXPECTED_CACHE_KEY)
@@ -40,7 +45,7 @@ def test_read_cached_token_returns_none_on_miss(mocker):
     mock_cache.get.return_value = None
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
 
 
 def test_read_cached_token_returns_none_on_redis_error(mocker):
@@ -48,7 +53,7 @@ def test_read_cached_token_returns_none_on_redis_error(mocker):
     mock_cache.get.side_effect = redis_exceptions.ConnectionError("redis is down")
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
 
 
 def test_read_cached_token_returns_none_on_corrupt_entry(mocker):
@@ -56,7 +61,7 @@ def test_read_cached_token_returns_none_on_corrupt_entry(mocker):
     mock_cache.get.return_value = "not-json"
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
 
 
 def test_read_cached_token_returns_none_on_null_access_token(mocker):
@@ -67,7 +72,7 @@ def test_read_cached_token_returns_none_on_null_access_token(mocker):
     )
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) is None
 
 
 def test_write_cached_token_sets_entry_with_ttl(mocker):
@@ -75,7 +80,7 @@ def test_write_cached_token_sets_entry_with_ttl(mocker):
     mocker.patch("core.er_auth._cache_db", mock_cache)
     expires_at = datetime.now(tz=timezone.utc) + timedelta(seconds=1000)
 
-    er_auth.write_cached_token(TOKEN_URL, USERNAME, "new-token", expires_at)
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "new-token", expires_at)
 
     args, _ = mock_cache.setex.call_args
     key, ttl, entry = args
@@ -91,7 +96,7 @@ def test_write_cached_token_skips_already_expired_token(mocker):
     mocker.patch("core.er_auth._cache_db", mock_cache)
     expires_at = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
 
-    er_auth.write_cached_token(TOKEN_URL, USERNAME, "stale-token", expires_at)
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "stale-token", expires_at)
 
     mock_cache.setex.assert_not_called()
 
@@ -102,14 +107,14 @@ def test_write_cached_token_swallows_redis_error(mocker):
     mocker.patch("core.er_auth._cache_db", mock_cache)
     expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=1)
 
-    er_auth.write_cached_token(TOKEN_URL, USERNAME, "new-token", expires_at)  # must not raise
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "new-token", expires_at)  # must not raise
 
 
 def test_invalidate_cached_token_deletes_key(mocker):
     mock_cache = mocker.MagicMock()
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    er_auth.invalidate_cached_token(TOKEN_URL, USERNAME)
+    er_auth.invalidate_cached_token(TOKEN_URL, USERNAME, PASSWORD)
 
     mock_cache.delete.assert_called_once_with(EXPECTED_CACHE_KEY)
 
@@ -119,7 +124,22 @@ def test_invalidate_cached_token_swallows_redis_error(mocker):
     mock_cache.delete.side_effect = redis_exceptions.ConnectionError("redis is down")
     mocker.patch("core.er_auth._cache_db", mock_cache)
 
-    er_auth.invalidate_cached_token(TOKEN_URL, USERNAME)  # must not raise
+    er_auth.invalidate_cached_token(TOKEN_URL, USERNAME, PASSWORD)  # must not raise
+
+
+def test_cached_token_is_not_shared_across_different_passwords(mocker):
+    fake_store = {}
+    mock_cache = mocker.MagicMock()
+    mock_cache.setex.side_effect = lambda key, ttl, value: fake_store.__setitem__(key, value)
+    mock_cache.get.side_effect = fake_store.get
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+
+    er_auth.write_cached_token(TOKEN_URL, USERNAME, PASSWORD, "secret-token", expires_at)
+
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, PASSWORD) == ("secret-token", expires_at)
+    # A client that does not present the same password must not see the token.
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME, "wrong-password") is None
 
 
 def _make_client():
@@ -417,6 +437,7 @@ async def test_v1_dispatcher_retries_send_once_on_bad_credentials(
     erclient_mock.close = mocker.AsyncMock(return_value=None)
     erclient_mock.token_url = TOKEN_URL
     erclient_mock.username = USERNAME
+    erclient_mock.password = PASSWORD
     mocked_erclient_class = mocker.MagicMock(return_value=erclient_mock)
     mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mocked_erclient_class)
     config = SimpleNamespace(

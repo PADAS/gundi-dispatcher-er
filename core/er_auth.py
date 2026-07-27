@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -20,15 +21,19 @@ LOGIN_MAX_TIME_SECONDS = 10
 _cache_db = get_redis_db()
 
 
-def _token_cache_key(token_url, username):
+def _token_cache_key(token_url, username, password):
+    # The credential fingerprint binds the cache entry to the full credential
+    # pair: a client presenting the right username but a wrong password must
+    # miss the cache and go through a real (validating) password grant.
     host = urlparse(token_url).hostname or token_url
-    return f"{TOKEN_CACHE_KEY_PREFIX}.{host}.{username}"
+    credential_fingerprint = hashlib.sha256(f"{username}:{password}".encode()).hexdigest()[:16]
+    return f"{TOKEN_CACHE_KEY_PREFIX}.{host}.{username}.{credential_fingerprint}"
 
 
-def read_cached_token(token_url, username):
+def read_cached_token(token_url, username, password):
     """Return (access_token, expires_at) from the cache, or None. Never raises."""
     try:
-        raw_entry = _cache_db.get(_token_cache_key(token_url, username))
+        raw_entry = _cache_db.get(_token_cache_key(token_url, username, password))
     except Exception as e:
         logger.warning(f"Error reading ER auth token from cache: {e}")
         return None
@@ -50,7 +55,7 @@ def read_cached_token(token_url, username):
         return None
 
 
-def write_cached_token(token_url, username, access_token, expires_at):
+def write_cached_token(token_url, username, password, access_token, expires_at):
     """Cache an access token with TTL matching its expiry. Never raises."""
     ttl_seconds = int((expires_at - datetime.now(tz=timezone.utc)).total_seconds())
     if ttl_seconds <= 0:
@@ -59,15 +64,15 @@ def write_cached_token(token_url, username, access_token, expires_at):
         {"access_token": access_token, "expires_at": expires_at.isoformat()}
     )
     try:
-        _cache_db.setex(_token_cache_key(token_url, username), ttl_seconds, entry)
+        _cache_db.setex(_token_cache_key(token_url, username, password), ttl_seconds, entry)
     except Exception as e:
         logger.warning(f"Error writing ER auth token to cache: {e}")
 
 
-def invalidate_cached_token(token_url, username):
+def invalidate_cached_token(token_url, username, password):
     """Delete a cached token (e.g. after ER rejects it). Never raises."""
     try:
-        _cache_db.delete(_token_cache_key(token_url, username))
+        _cache_db.delete(_token_cache_key(token_url, username, password))
     except Exception as e:
         logger.warning(f"Error deleting ER auth token from cache: {e}")
 
@@ -96,7 +101,7 @@ class TokenCachingAsyncERClient(AsyncERClient):
         # Static-token clients and clients that already logged in have valid
         # auth; a client with a year-2099 expiry (token= kwarg) always hits this.
         if not self._auth_is_valid():
-            cached = read_cached_token(self.token_url, self.username)
+            cached = read_cached_token(self.token_url, self.username, self.password)
             if cached:
                 access_token, expires_at = cached
                 min_valid_until = datetime.now(tz=timezone.utc) + timedelta(
@@ -124,6 +129,10 @@ class TokenCachingAsyncERClient(AsyncERClient):
     async def login(self):
         result = await super().login()
         write_cached_token(
-            self.token_url, self.username, self.auth["access_token"], self.auth_expires
+            self.token_url,
+            self.username,
+            self.password,
+            self.auth["access_token"],
+            self.auth_expires,
         )
         return result
