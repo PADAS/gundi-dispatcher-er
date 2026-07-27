@@ -36,12 +36,15 @@ def read_cached_token(token_url, username):
         return None
     try:
         entry = json.loads(raw_entry)
+        access_token = entry["access_token"]
         expires_at = datetime.fromisoformat(entry["expires_at"])
+        if not access_token:
+            raise ValueError("missing access_token")
         # Discard naive datetimes (no timezone info) to prevent comparison errors
         if expires_at.tzinfo is None:
             logger.warning(f"Discarding invalid ER auth token cache entry: naive expires_at")
             return None
-        return entry["access_token"], expires_at
+        return access_token, expires_at
     except (ValueError, KeyError, TypeError) as e:
         logger.warning(f"Discarding invalid ER auth token cache entry: {e}")
         return None

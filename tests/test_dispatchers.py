@@ -260,3 +260,30 @@ async def test_v2_dispatcher_does_not_retry_on_permission_denied(
 
     assert erclient_mock.post_report.await_count == 1
     mock_cache_empty.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_v2_dispatcher_does_not_retry_static_token_client_on_bad_credentials(
+    mocker,
+    mock_cache_empty,
+    mock_er_bad_credentials_error,
+    post_report_response,
+    destination_integration_v2,
+    event_v2_transformed_er,
+):
+    mocker.patch("core.er_auth._cache_db", mock_cache_empty)
+    erclient_mock = _make_erclient_mock_for_auth_retry(
+        mocker, "post_report", [mock_er_bad_credentials_error, post_report_response]
+    )
+    erclient_mock.username = None
+    mocked_erclient_class = mocker.MagicMock(return_value=erclient_mock)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mocked_erclient_class)
+    dispatcher = dispatchers.EREventDispatcher(
+        integration=destination_integration_v2, provider="fake-provider"
+    )
+
+    with pytest.raises(er_errors.ERClientBadCredentials):
+        await dispatcher.send(event_v2_transformed_er.payload)
+
+    assert erclient_mock.post_report.await_count == 1
+    mock_cache_empty.delete.assert_not_called()

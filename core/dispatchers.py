@@ -42,8 +42,14 @@ class ERDispatcher(Dispatcher, ABC):
         try:
             return await self._send(data, **kwargs)
         except ERClientBadCredentials:
+            if not self.er_client.username:
+                # Static-token client: there's no login to redo, so a rebuilt
+                # client would get the exact same token. Fail fast instead of
+                # burning a pointless retry and invalidating a meaningless key.
+                raise
             logger.warning(
                 "ER rejected the auth token (401). Invalidating cached token and retrying once.",
+                extra={"endpoint": self.configuration.endpoint},
             )
             invalidate_cached_token(self.er_client.token_url, self.er_client.username)
             # The failed _send closed the client's http session; build a fresh one.
@@ -222,6 +228,11 @@ class ERDispatcherV2(DispatcherV2, ABC):
         try:
             return await self._send(data, **kwargs)
         except ERClientBadCredentials:
+            if not self.er_client.username:
+                # Static-token client: there's no login to redo, so a rebuilt
+                # client would get the exact same token. Fail fast instead of
+                # burning a pointless retry and invalidating a meaningless key.
+                raise
             logger.warning(
                 "ER rejected the auth token (401). Invalidating cached token and retrying once.",
                 extra={"integration_id": str(self.integration.id)},

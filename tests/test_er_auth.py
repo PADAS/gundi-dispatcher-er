@@ -56,6 +56,17 @@ def test_read_cached_token_returns_none_on_corrupt_entry(mocker):
     assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
 
 
+def test_read_cached_token_returns_none_on_null_access_token(mocker):
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = json.dumps(
+        {"access_token": None, "expires_at": expires_at.isoformat()}
+    )
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+
+    assert er_auth.read_cached_token(TOKEN_URL, USERNAME) is None
+
+
 def test_write_cached_token_sets_entry_with_ttl(mocker):
     mock_cache = mocker.MagicMock()
     mocker.patch("core.er_auth._cache_db", mock_cache)
@@ -329,6 +340,26 @@ async def test_auth_headers_discards_cached_token_with_naive_expires_at(
     assert mock_post.await_count == 1
 
 
+@pytest.mark.asyncio
+async def test_auth_headers_discards_cached_token_with_null_access_token(
+    mocker, mock_token_cache
+):
+    # Cache entry with a null access_token — should be treated as invalid
+    expires_at = datetime.now(tz=timezone.utc) + timedelta(hours=47)
+    mock_token_cache.get.return_value = json.dumps(
+        {"access_token": None, "expires_at": expires_at.isoformat()}
+    )
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    # Should have logged in with fresh token, not produced "Bearer None"
+    assert headers["Authorization"] == "Bearer new-token"
+    assert mock_post.await_count == 1
+
+
 from types import SimpleNamespace
 from erclient import er_errors
 
@@ -383,3 +414,34 @@ async def test_v1_dispatcher_retries_send_once_on_bad_credentials(
     assert erclient_mock.post_sensor_observation.await_count == 2
     mock_cache.delete.assert_called_once()
     assert mocked_erclient_class.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_v1_dispatcher_does_not_retry_static_token_client_on_bad_credentials(
+    mocker, mock_er_bad_credentials_error
+):
+    mock_cache = mocker.MagicMock()
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    erclient_mock = mocker.MagicMock()
+    erclient_mock.post_sensor_observation = mocker.AsyncMock(
+        side_effect=[mock_er_bad_credentials_error, {"status": "ok"}]
+    )
+    erclient_mock.close = mocker.AsyncMock(return_value=None)
+    erclient_mock.token_url = TOKEN_URL
+    erclient_mock.username = None
+    mocked_erclient_class = mocker.MagicMock(return_value=erclient_mock)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mocked_erclient_class)
+    config = SimpleNamespace(
+        endpoint="https://fake-site.pamdas.org",
+        login=None,
+        password=None,
+        token="static-long-lived-token",
+    )
+
+    dispatcher = ERPositionDispatcher(config, "fake-provider")
+
+    with pytest.raises(er_errors.ERClientBadCredentials):
+        await dispatcher.send({"recorded_at": "2026-07-27T10:00:00Z"})
+
+    assert erclient_mock.post_sensor_observation.await_count == 1
+    mock_cache.delete.assert_not_called()
