@@ -307,3 +307,23 @@ async def test_auth_headers_with_static_token_never_touches_cache(
     assert headers["Authorization"] == "Bearer static-long-lived-token"
     mock_token_cache.get.assert_not_called()
     mock_post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auth_headers_discards_cached_token_with_naive_expires_at(
+    mocker, mock_token_cache
+):
+    # Cache entry with naive datetime (no UTC offset) — should be treated as invalid
+    naive_expires_at = datetime.now() + timedelta(hours=47)
+    mock_token_cache.get.return_value = json.dumps(
+        {"access_token": "naive-token", "expires_at": naive_expires_at.isoformat()}
+    )
+    client = _make_client()
+    mock_post = mocker.AsyncMock(return_value=_token_response(200))
+    mocker.patch.object(client._http_session, "post", mock_post)
+
+    headers = await client.auth_headers()
+
+    # Should have logged in with fresh token, not used the naive one
+    assert headers["Authorization"] == "Bearer new-token"
+    assert mock_post.await_count == 1
