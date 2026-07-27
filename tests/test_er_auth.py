@@ -330,8 +330,9 @@ async def test_auth_headers_discards_cached_token_with_naive_expires_at(
 
 
 from types import SimpleNamespace
+from erclient import er_errors
 
-from core.dispatchers import ERDispatcher, ERDispatcherV2
+from core.dispatchers import ERDispatcher, ERDispatcherV2, ERPositionDispatcher
 
 
 def test_make_er_client_v1_returns_token_caching_client():
@@ -350,3 +351,35 @@ def test_make_er_client_v2_returns_token_caching_client(destination_integration_
         integration=destination_integration_v2, provider="fake-provider"
     )
     assert isinstance(client, er_auth.TokenCachingAsyncERClient)
+
+
+@pytest.mark.asyncio
+async def test_v1_dispatcher_retries_send_once_on_bad_credentials(
+    mocker, mock_er_bad_credentials_error
+):
+    mock_cache = mocker.MagicMock()
+    mocker.patch("core.er_auth._cache_db", mock_cache)
+    erclient_mock = mocker.MagicMock()
+    erclient_mock.post_sensor_observation = mocker.AsyncMock(
+        side_effect=[mock_er_bad_credentials_error, {"status": "ok"}]
+    )
+    erclient_mock.close = mocker.AsyncMock(return_value=None)
+    erclient_mock.token_url = TOKEN_URL
+    erclient_mock.username = USERNAME
+    mocked_erclient_class = mocker.MagicMock(return_value=erclient_mock)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mocked_erclient_class)
+    config = SimpleNamespace(
+        endpoint="https://fake-site.pamdas.org",
+        login=USERNAME,
+        password="fake-password",
+        token=None,
+    )
+
+    dispatcher = ERPositionDispatcher(config, "fake-provider")
+
+    result = await dispatcher.send({"recorded_at": "2026-07-27T10:00:00Z"})
+
+    assert result == {"status": "ok"}
+    assert erclient_mock.post_sensor_observation.await_count == 2
+    mock_cache.delete.assert_called_once()
+    assert mocked_erclient_class.call_count == 2

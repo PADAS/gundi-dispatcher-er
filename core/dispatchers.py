@@ -38,6 +38,22 @@ class ERDispatcher(Dispatcher, ABC):
         self.er_client = self.make_er_client(config, provider)
         # self.load_batch_size = 1000
 
+    async def send(self, data, **kwargs):
+        try:
+            return await self._send(data, **kwargs)
+        except ERClientBadCredentials:
+            logger.warning(
+                "ER rejected the auth token (401). Invalidating cached token and retrying once.",
+            )
+            invalidate_cached_token(self.er_client.token_url, self.er_client.username)
+            # The failed _send closed the client's http session; build a fresh one.
+            self.er_client = self.make_er_client(self.configuration, self.provider)
+            return await self._send(data, **kwargs)
+
+    @abstractmethod
+    async def _send(self, data, **kwargs):
+        ...
+
     @staticmethod
     def make_er_client(
         config: schemas.OutboundConfiguration, provider: str
@@ -73,7 +89,7 @@ class ERPositionDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERPositionDispatcher, self).__init__(config, provider)
 
-    async def send(self, position: dict, **kwargs):
+    async def _send(self, position: dict, **kwargs):
         result = None
         try:
             result = await self.er_client.post_sensor_observation(position)
@@ -89,7 +105,7 @@ class ERGeoEventDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
 
-    async def send(self, messages: Union[list, dict], **kwargs):
+    async def _send(self, messages: Union[list, dict], **kwargs):
         results = []
         if isinstance(messages, dict):
             messages = [messages]
@@ -109,7 +125,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         super(ERCameraTrapDispatcher, self).__init__(config, provider)
         self.cloud_storage = get_cloud_storage()
 
-    async def send(self, camera_trap_payload: dict, **kwargs):
+    async def _send(self, camera_trap_payload: dict, **kwargs):
         result = None
         try:
             file_name = camera_trap_payload.get("file")
