@@ -30,7 +30,7 @@ async def test_process_event_v2_successfully(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(event_v2)
     # Check that the report was sent o ER
@@ -70,7 +70,7 @@ async def test_process_event_update_v2_successfully(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(event_update_v2)
     # Check that the report was patched in ER
@@ -101,7 +101,7 @@ async def test_process_attachment_v2_successfully(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_with_one_miss_then_hit)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(attachment_v2_as_request)
@@ -137,7 +137,7 @@ async def test_process_observation_v2_successfully(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(observation_v2_as_request)
     # Check that the config was retrieved from the portal
@@ -161,7 +161,7 @@ async def test_process_text_message_successfully(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(text_message_as_pubsub_request)
     # Check that the config was retrieved from the portal
@@ -211,7 +211,7 @@ async def test_system_event_is_published_on_successful_delivery(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(event_v2_as_pubsub_request)
     # Check that the report was sent o ER
@@ -254,7 +254,7 @@ async def test_system_event_is_published_on_delivery_failure(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class_with_error)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class_with_error)
     mocker.patch("core.utils.pubsub", mock_pubsub_client_with_observation_delivery_failure)
     # Check that the dispatcher raises an exception so the message is retried later
     with pytest.raises(DispatcherException):
@@ -285,7 +285,7 @@ async def test_process_event_v2_with_custom_provider_key(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(event_v2_with_provider_key_as_request)
     # Check that the report was sent o ER
@@ -307,7 +307,7 @@ async def test_process_observation_v2_with_custom_provider_key(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     await process_request(observation_v2_with_provider_key_as_request)
     # Check that the config was retrieved from the portal
@@ -331,7 +331,7 @@ async def test_raise_exception_on_internal_exception(
     # Mock external dependencies
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class_with_internal_exception)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
 
     # Check that the dispatcher raises an exception so the message is retried later

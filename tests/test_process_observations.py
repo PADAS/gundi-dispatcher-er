@@ -28,7 +28,7 @@ async def test_process_position_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.services.pubsub", mock_pubsub_client)
     await process_request(position)
     assert mock_erclient_class.called == expected
@@ -51,7 +51,7 @@ async def test_process_geoevent_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     await process_request(geoevent_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.__aenter__.return_value.post_report.called
@@ -74,7 +74,7 @@ async def test_process_cameratrap_event_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
     #get_cloud_storage
     await process_request(cameratrap_event_as_request)
@@ -94,7 +94,7 @@ async def test_raise_exception_on_portal_connection_error(
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_client_connect_error)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     with pytest.raises(Exception) as e_info:
         await process_request(position_as_request)
     # Check that the right exception type is raised to activate the retry mechanism
@@ -113,7 +113,7 @@ async def test_raise_exception_on_portal_500_error(
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_with_500_error)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     with pytest.raises(Exception) as e_info:
         await process_request(position_as_request)
     # Check that the right exception type is raised to activate the retry mechanism
@@ -132,7 +132,7 @@ async def test_raise_exception_on_internal_exception(
 ):
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class_with_internal_exception)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     # Check that unhandled exceptions are raised so GCP can retry
     with pytest.raises(Exception) as e_info:
         await process_request(position_as_request)
@@ -154,7 +154,7 @@ async def test_process_position_with_faulty_cache_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_with_connection_error)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     await process_request(position_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.post_sensor_observation.called
@@ -176,7 +176,7 @@ async def test_process_geoevent_with_faulty_cache_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_with_connection_error)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     await process_request(geoevent_as_request)
     assert mock_erclient_class.called
     assert mock_erclient_class.return_value.__aenter__.return_value.post_report.called
@@ -199,7 +199,7 @@ async def test_process_cameratrap_event_with_faulty_cache_successfully(
     )
     mocker.patch("core.utils._cache_db", mock_cache_with_connection_error)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.dispatchers.get_cloud_storage", mock_get_cloud_storage)
     await process_request(cameratrap_event_as_request)
     assert mock_erclient_class.called

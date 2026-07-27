@@ -363,7 +363,7 @@ async def test_process_request_defers_v2_message_on_cooldown(
 ):
     mock_throttle_db.ttl.return_value = 60  # site cooldown active
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
 
     with pytest.raises(ThrottledMessage):
@@ -384,7 +384,7 @@ async def test_process_request_admits_v2_message_under_cap(
     # ttl -> -2 (no cooldown), incr -> 1 (under cap), get -> None (cache miss)
     mock_throttle_db.get.return_value = None
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
 
     await process_request(event_v2_as_pubsub_request)
@@ -407,7 +407,7 @@ async def test_v1_messages_bypass_the_gate(
     # throttling gate reads utils._cache_db fresh at call time).
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.PortalApi", mock_gundi_client_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.services.pubsub", mock_pubsub_client)
 
     await process_request(position_as_request)
@@ -473,7 +473,7 @@ async def test_429_failure_records_family_distress_and_notifies(
     ))
     mock_record = mocker.patch("core.throttling.record_distress", return_value="events")
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     mocker.patch("core.event_handlers.publish_event", mock_publish_event)
 
@@ -506,7 +506,7 @@ async def test_retry_after_from_erclient_drives_cooldown_ttl(
         status_code=429, response_body="{}", retry_after=90,
     ))
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     mocker.patch("core.event_handlers.publish_event", mock_publish_event)
 
@@ -533,7 +533,7 @@ async def test_no_notice_published_when_already_notified(
     ))
     mocker.patch("core.throttling.record_distress", return_value=None)  # SETNX lost
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
     mocker.patch("core.event_handlers.publish_event", mock_publish_event)
 
@@ -554,7 +554,7 @@ async def test_successful_delivery_records_success(
     mock_throttle_db.get.return_value = None
     mock_record_success = mocker.patch("core.throttling.record_success")
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    mocker.patch("core.dispatchers.AsyncERClient", mock_erclient_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
     mocker.patch("core.utils.pubsub", mock_pubsub_client)
 
     await process_request(event_v2_as_pubsub_request)
