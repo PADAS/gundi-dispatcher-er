@@ -465,7 +465,9 @@ def test_make_er_client_v1_normalizes_http_token_url_to_https():
         token=None,
     )
     client = ERDispatcher.make_er_client(config, "fake-provider")
-    assert client.service_root == "https://fake-site.pamdas.org/api/v1.0"
+    # Older erclient builds store the full API root verbatim; newer builds
+    # normalize service_root to the base URL. Assert the https upgrade only.
+    assert client.service_root.startswith("https://fake-site.pamdas.org")
     assert client.token_url == "https://fake-site.pamdas.org/oauth2/token"
 
 
@@ -476,7 +478,9 @@ def test_make_er_client_v2_normalizes_http_token_url_to_https(destination_integr
     client = ERDispatcherV2.make_er_client(
         integration=integration, provider="fake-provider"
     )
-    assert client.service_root == "https://gundi-load-testing.pamdas.org/api/v1.0"
+    # Older erclient builds store the full API root verbatim; newer builds
+    # normalize service_root to the base URL. Assert the https upgrade only.
+    assert client.service_root.startswith("https://gundi-load-testing.pamdas.org")
     assert client.token_url == "https://gundi-load-testing.pamdas.org/oauth2/token"
 
 
