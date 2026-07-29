@@ -407,9 +407,14 @@ async def process_request(request):
             # Admission gate: defer over-cap / cooling-down destinations.
             # Runs after the too-old check above so exhausted messages always
             # dead-letter instead of being nacked past PubSub retention.
+            try:
+                admission_amount = int(attributes.get("batch_count") or 1)
+            except (TypeError, ValueError):
+                admission_amount = 1
             await throttling.check_admission(
                 destination_id=attributes.get("destination_id"),
                 stream_type=attributes.get("stream_type"),
+                amount=admission_amount,
             )
             await process_transformer_event_v2(transformed_observation, attributes)
         else:  # Default to v1

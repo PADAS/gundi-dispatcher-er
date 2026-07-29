@@ -3,7 +3,7 @@ from redis import exceptions as redis_exceptions
 
 from core import settings, throttling
 from core.services import process_request
-from core.throttling import ThrottledMessage
+from core.throttling import ThrottledMessage, check_admission
 import main as main_module
 
 from .conftest import async_return
@@ -562,3 +562,30 @@ async def test_successful_delivery_records_success(
     kwargs = mock_record_success.call_args.kwargs
     assert kwargs["stream_type"] == "ev"
     assert str(kwargs["destination_id"]) == "338225f3-91f9-4fe1-b013-353a229ce504"
+
+
+@pytest.mark.asyncio
+async def test_admission_debits_batch_amount(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.return_value = 250  # first increment of the window, amount=250
+    await check_admission(destination_id="dest-1", stream_type="obv", amount=250)
+    # incr was called with the batch amount
+    args, kwargs = mock_throttle_db.incr.call_args
+    assert 250 in args or kwargs.get("amount") == 250
+    # First increment of the window (count == amount) must still set the expiry
+    assert mock_throttle_db.expire.called
+
+
+@pytest.mark.asyncio
+async def test_admission_rejects_batch_over_cap(mock_throttle_db, throttling_enabled, mocker):
+    # Cap is 300/min by default; a second batch pushing the counter to 500 must be deferred
+    mocker.patch.object(settings, "THROTTLE_GRACE_WAIT_MAX_SECONDS", 0)
+    mock_throttle_db.incr.return_value = 500
+    with pytest.raises(ThrottledMessage):
+        await check_admission(destination_id="dest-1", stream_type="obv", amount=250)
+
+
+@pytest.mark.asyncio
+async def test_admission_default_amount_is_one(mock_throttle_db, throttling_enabled):
+    mock_throttle_db.incr.return_value = 1
+    await check_admission(destination_id="dest-1", stream_type="obv")
+    assert mock_throttle_db.expire.called  # count == amount == 1 sets the window expiry

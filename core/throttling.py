@@ -68,7 +68,7 @@ def _rate_key(destination_id, family, window):
     return f"throttle:rate:{destination_id}:{family}:{window}"
 
 
-def _evaluate(destination_id, family):
+def _evaluate(destination_id, family, amount=1):
     # Returns (admitted, reason, retry_after). Plain commands instead of a Lua
     # script: INCR is atomic, and the check-then-increment race admits at most
     # a few extra messages — acceptable for a kindness cap, and it keeps this
@@ -83,8 +83,9 @@ def _evaluate(destination_id, family):
             return False, "cooldown", ttl
     now = int(time.time())
     rate_key = _rate_key(destination_id, family, now // 60)
-    count = db.incr(rate_key)
-    if count == 1:
+    count = db.incr(rate_key, amount)
+    if count == amount:
+        # First increment of this window (whatever its size).
         # Two windows so a straggler INCR never resurrects an expired key
         db.expire(rate_key, 120)
     if count <= _cap_for_family(family):
@@ -92,19 +93,21 @@ def _evaluate(destination_id, family):
     return False, "rate", 60 - (now % 60)
 
 
-async def check_admission(destination_id, stream_type):
+async def check_admission(destination_id, stream_type, amount=1):
     # Raises ThrottledMessage when the message must be deferred (nacked).
+    # `amount` is the number of items the message carries (1 for classic
+    # single-observation messages, N for batch envelopes).
     if not settings.THROTTLING_ENABLED or not destination_id:
         return
     family = get_family(stream_type)
     try:
-        admitted, reason, retry_after = _evaluate(destination_id, family)
+        admitted, reason, retry_after = _evaluate(destination_id, family, amount)
         if admitted:
             return
         if reason == "rate" and retry_after <= settings.THROTTLE_GRACE_WAIT_MAX_SECONDS:
             # The window opens soon: wait it out instead of paying a redelivery
             await asyncio.sleep(retry_after)
-            admitted, reason, retry_after = _evaluate(destination_id, family)
+            admitted, reason, retry_after = _evaluate(destination_id, family, amount)
             if admitted:
                 return
     except Exception as e:
