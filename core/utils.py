@@ -396,6 +396,20 @@ def cache_dispatched_observation(
         )
 
 
+def is_observation_dispatched(gundi_id, destination_id) -> bool:
+    # Cache-only check used by the batch path to skip already-delivered items
+    # on envelope redelivery. Unlike get_dispatched_observation, this must NOT
+    # fall back to a portal query — a large batch would turn one cache outage
+    # into hundreds of portal calls. Fail open: worst case an item is re-posted
+    # and ER receives a duplicate observation.
+    try:
+        cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+        return bool(_cache_db.get(cache_key))
+    except Exception as e:
+        logger.warning(f"Error reading dispatched-observation cache: {e}")
+        return False
+
+
 def extract_fields_from_message(message):
     if message:
         data = base64.b64decode(message.get("data", "").encode('utf-8'))

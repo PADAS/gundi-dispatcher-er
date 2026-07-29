@@ -326,6 +326,25 @@ class ERObservationDispatcher(ERDispatcherV2):
                 raise ex
 
 
+class ERObservationsBatchDispatcher(ERDispatcherV2):
+
+    async def _send(self, observations, **kwargs):
+        # observations: List[schemas.v2.ERObservation] sharing this client's
+        # provider_key. Posted as a single JSON array to the ER sensors endpoint.
+        async with self.er_client as client:
+            try:
+                observations_cleaned = [
+                    json.loads(o.json(exclude_none=True, exclude_unset=True))
+                    for o in observations
+                ]
+                return await client.post_sensor_observation(observations_cleaned)
+            except Exception as ex:
+                logger.exception(
+                    f"Error sending observations batch to {client.service_root}: \n{type(ex)}: {ex}"
+                )
+                raise ex
+
+
 class ERMessageDispatcher(ERDispatcherV2):
 
     async def _send(self, message: schemas.v2.ERMessage, **kwargs):

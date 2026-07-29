@@ -83,3 +83,8 @@ THROTTLE_COOLDOWN_BASE_SECONDS = env.int("THROTTLE_COOLDOWN_BASE_SECONDS", 30)
 THROTTLE_COOLDOWN_MAX_SECONDS = env.int("THROTTLE_COOLDOWN_MAX_SECONDS", 600)
 THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS = env.int("THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS", 900)
 THROTTLE_NOTIFY_TTL_SECONDS = env.int("THROTTLE_NOTIFY_TTL_SECONDS", 300)
+
+# Batch delivery (see cdip repo: docs/superpowers/specs/2026-07-29-pipeline-batch-envelope-design.md)
+# Max observations per single ER bulk request. Independent from the envelope
+# size chosen upstream; an envelope larger than this is posted in sub-chunks.
+ER_BULK_SIZE = env.int("ER_BULK_SIZE", 200)
