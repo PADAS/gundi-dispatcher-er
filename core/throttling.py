@@ -88,7 +88,16 @@ def _evaluate(destination_id, family, amount=1):
         # First increment of this window (whatever its size).
         # Two windows so a straggler INCR never resurrects an expired key
         db.expire(rate_key, 120)
-    if count <= _cap_for_family(family):
+    # Admit whenever there was headroom BEFORE this increment (count - amount
+    # is the window's prior total), not whenever the post-increment total
+    # fits under the cap. A batch larger than the cap (amount > cap) can
+    # never satisfy `count <= cap`, so the old check deferred it forever -
+    # every retry lands at the same over-cap count and it's never admitted,
+    # until the message ages out and is silently dead-lettered. Admitting on
+    # prior headroom guarantees progress for any batch size, overshooting
+    # the cap by at most one batch, while single-item traffic (amount=1) is
+    # unaffected: count - 1 < cap is equivalent to count <= cap.
+    if count - amount < _cap_for_family(family):
         return True, None, None
     return False, "rate", 60 - (now % 60)
 

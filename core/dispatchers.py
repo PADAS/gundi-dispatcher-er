@@ -331,13 +331,26 @@ class ERObservationsBatchDispatcher(ERDispatcherV2):
     async def _send(self, observations, **kwargs):
         # observations: List[schemas.v2.ERObservation] sharing this client's
         # provider_key. Posted as a single JSON array to the ER sensors endpoint.
+        #
+        # NOTE: we deliberately do NOT call client.post_sensor_observation()
+        # with a list. erclient 1.16.0's implementation has a parameter-
+        # rebinding bug: it cleans each item in a for-loop over
+        # `observation`, which shadows its own list-vs-single argument, so
+        # the payload it actually posts is the LAST element only, not the
+        # list. Until a fixed erclient ships, replicate the intended
+        # behavior directly against the pinned client's building blocks.
         async with self.er_client as client:
             try:
                 observations_cleaned = [
                     json.loads(o.json(exclude_none=True, exclude_unset=True))
                     for o in observations
                 ]
-                return await client.post_sensor_observation(observations_cleaned)
+                for obs in observations_cleaned:
+                    client._clean_observation(obs)
+                return await client._post(
+                    f"sensors/generic/{client.provider_key}/status",
+                    payload=observations_cleaned,
+                )
             except Exception as ex:
                 logger.exception(
                     f"Error sending observations batch to {client.service_root}: \n{type(ex)}: {ex}"

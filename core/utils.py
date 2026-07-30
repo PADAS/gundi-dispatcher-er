@@ -366,6 +366,7 @@ async def get_dispatched_observation(gundi_id: str, destination_id: str) -> gund
 
 def cache_dispatched_observation(
         observation: gundi_schemas_v2.DispatchedObservation,
+        ttl: int = None,
 ):
     try:
         gundi_id = str(observation.gundi_id)
@@ -381,7 +382,7 @@ def cache_dispatched_observation(
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
         _cache_db.setex(
             name=cache_key,
-            time=settings.DISPATCHED_OBSERVATIONS_CACHE_TTL,
+            time=ttl if ttl is not None else settings.DISPATCHED_OBSERVATIONS_CACHE_TTL,
             value=observation.json()
         )
     except redis_exceptions.ConnectionError as e:

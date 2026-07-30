@@ -60,6 +60,34 @@ async def publish_throttling_notice(attributes: dict, scope: str):
         logger.exception(f"Error publishing throttling notice: {e}")
 
 
+async def publish_batch_dead_lettered_notice(attributes: dict):
+    # Batch envelopes carry no gundi_id in their attributes, so
+    # publish_retries_exhausted_event (which requires one) bails out for
+    # them with just a warning log - the age-out would otherwise be
+    # completely silent: no activity-log entry, no failure event, and up to
+    # OBSERVATIONS_BATCH_MAX_ITEMS observations simply vanish with no trace.
+    title = (
+        "Observations batch dead-lettered after retries "
+        f"(batch_count={attributes.get('batch_count')})"
+    )
+    try:
+        await publish_event(
+            event=system_events.DispatcherCustomLog(
+                payload=gundi_schemas_v2.CustomDispatcherLog(
+                    gundi_id=None,
+                    related_to=attributes.get("related_to"),
+                    data_provider_id=attributes.get("data_provider_id"),
+                    destination_id=attributes.get("destination_id"),
+                    title=title,
+                    level=LogLevel.ERROR,
+                )
+            ),
+            topic_name=settings.DISPATCHER_EVENTS_TOPIC,
+        )
+    except Exception as e:
+        logger.exception(f"Error publishing batch dead-lettered notice: {e}")
+
+
 async def dispatch_transformed_observation_v2(observation, attributes: dict):
     with tracing.tracer.start_as_current_span(
             "er_dispatcher.dispatch_transformed_observation", kind=SpanKind.CLIENT
@@ -327,7 +355,12 @@ async def handle_er_message(event: MessageTransformedER, attributes: dict):
 
 # ER status codes that mean the payload itself is bad: retrying the same
 # bytes can never succeed, so shrink the batch instead of nacking it.
-PERMANENT_ER_STATUS_CODES = {400, 403}
+# 403 is deliberately NOT here: it's typically an auth/permission condition
+# (revoked token, provider key not yet authorized) that is recoverable once
+# fixed, and the single-item path already retries it for 24h - treating it
+# as permanent here would turn a fixable config error into permanent data
+# loss for every item in the batch.
+PERMANENT_ER_STATUS_CODES = {400}
 
 
 def _chunked(items, size):
@@ -383,7 +416,13 @@ def _cache_item_as_dispatched(batch, item):
             data_provider_id=batch.data_provider_id,
             destination_id=batch.destination_id,
             delivered_at=datetime.now(timezone.utc),
-        )
+        ),
+        # Longer TTL than the single-item path: this cache is what makes
+        # envelope redelivery idempotent (see is_observation_dispatched), and
+        # PubSub keeps retrying for MAX_EVENT_AGE_SECONDS (24h) - a shorter
+        # TTL would silently expire the skip-cache mid-retry-window and
+        # re-post already-delivered items as duplicates.
+        ttl=settings.DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL,
     )
 
 
@@ -410,15 +449,26 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
         ]
         current_span.set_attribute("pending_count", len(pending))
         if not pending:
+            # Everything is already cached as dispatched, but the original
+            # attempt may have died after caching and before publishing
+            # ObservationsBatchDelivered (e.g. function timeout). Publish for
+            # ALL items so trace stamping isn't lost forever on redelivery —
+            # the portal handler is idempotent against repeat events.
             logger.info(f"All items in batch {batch.batch_id} already delivered. Skipping.")
+            await _publish_batch_delivered(batch, [str(item.gundi_id) for item in batch.items])
             return
 
-        dispatcher = dispatchers.ERObservationsBatchDispatcher(
-            integration=destination_integration,
-            provider=batch.provider_key,
-        )
         delivered_gundi_ids = []
         for chunk in _chunked(pending, settings.ER_BULK_SIZE):
+            # A fresh dispatcher (and so a fresh underlying http client) per
+            # chunk: _send's `async with self.er_client` permanently closes
+            # the client on exit, so reusing one dispatcher across chunks
+            # would make every chunk after the first raise on a closed
+            # client (see C2 in the final review).
+            dispatcher = dispatchers.ERObservationsBatchDispatcher(
+                integration=destination_integration,
+                provider=batch.provider_key,
+            )
             try:
                 await dispatcher.send([item.observation for item in chunk])
             except Exception as e:
@@ -431,11 +481,13 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                         f"Bulk post rejected ({status_code}) for batch {batch.batch_id}. "
                         f"Falling back to per-item posts for {len(chunk)} items."
                     )
-                    single_dispatcher = dispatchers.ERObservationDispatcher(
-                        integration=destination_integration,
-                        provider=batch.provider_key,
-                    )
                     for item in chunk:
+                        # Fresh client per item too, for the same reason as
+                        # above (each single_dispatcher.send closes its client).
+                        single_dispatcher = dispatchers.ERObservationDispatcher(
+                            integration=destination_integration,
+                            provider=batch.provider_key,
+                        )
                         try:
                             await single_dispatcher.send(item.observation)
                         except Exception as item_exc:

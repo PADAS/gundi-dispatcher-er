@@ -576,10 +576,41 @@ async def test_admission_debits_batch_amount(mock_throttle_db, throttling_enable
 
 
 @pytest.mark.asyncio
-async def test_admission_rejects_batch_over_cap(mock_throttle_db, throttling_enabled, mocker):
-    # Cap is 300/min by default; a second batch pushing the counter to 500 must be deferred
-    mocker.patch.object(settings, "THROTTLE_GRACE_WAIT_MAX_SECONDS", 0)
+async def test_admission_admits_batch_larger_than_cap_when_window_not_full(
+        mock_throttle_db, throttling_enabled
+):
+    # C3 fix: a batch bigger than the whole per-minute cap must still be
+    # admitted as long as the window wasn't already full BEFORE this
+    # increment - otherwise it can NEVER be admitted (count will always land
+    # above the cap) and the envelope starves until it's silently
+    # dead-lettered at the 24h age-out. Cap is 300/min by default; a
+    # 500-item batch against an empty window (prior total 500-500=0 < 300)
+    # must be admitted, even though the post-increment count (500) exceeds
+    # the cap.
     mock_throttle_db.incr.return_value = 500
+    await check_admission(destination_id="dest-1", stream_type="obv", amount=500)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_admission_admits_batch_when_prior_window_had_headroom(
+        mock_throttle_db, throttling_enabled
+):
+    # Cap 300/min; prior total was 50 (count=300, amount=250 -> 300-250=50 <
+    # 300), so this batch is admitted even though the post-increment count
+    # (300) is at the cap.
+    mock_throttle_db.incr.return_value = 300
+    await check_admission(destination_id="dest-1", stream_type="obv", amount=250)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_admission_rejects_batch_when_window_already_full(
+        mock_throttle_db, throttling_enabled, mocker
+):
+    # Cap 300/min; the window was ALREADY at the cap before this increment
+    # (count=550, amount=250 -> prior total 300, not < 300), so this batch
+    # must still be deferred - the cap stays meaningful for a full window.
+    mocker.patch.object(settings, "THROTTLE_GRACE_WAIT_MAX_SECONDS", 0)
+    mock_throttle_db.incr.return_value = 550
     with pytest.raises(ThrottledMessage):
         await check_admission(destination_id="dest-1", stream_type="obv", amount=250)
 
@@ -589,3 +620,21 @@ async def test_admission_default_amount_is_one(mock_throttle_db, throttling_enab
     mock_throttle_db.incr.return_value = 1
     await check_admission(destination_id="dest-1", stream_type="obv")
     assert mock_throttle_db.expire.called  # count == amount == 1 sets the window expiry
+
+
+@pytest.mark.asyncio
+async def test_amount_one_admission_behavior_is_unchanged(
+        mock_throttle_db, throttling_enabled, mocker
+):
+    # count - 1 < cap is equivalent to the old count <= cap for the
+    # classic single-item case: admitted exactly at the cap, rejected just
+    # above it.
+    mocker.patch.object(settings, "THROTTLE_GRACE_WAIT_MAX_SECONDS", 0)
+    cap = settings.DEFAULT_MAX_OBSERVATION_DELIVERIES_PER_MINUTE
+
+    mock_throttle_db.incr.return_value = cap
+    await check_admission(destination_id="dest-1", stream_type="obv", amount=1)  # admitted at the cap
+
+    mock_throttle_db.incr.return_value = cap + 1
+    with pytest.raises(ThrottledMessage):
+        await check_admission(destination_id="dest-1", stream_type="obv", amount=1)  # rejected just above

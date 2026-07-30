@@ -52,6 +52,9 @@ ER_TOKEN_CACHE_SECRET = env.str("ER_TOKEN_CACHE_SECRET", "")
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 DISPATCHED_OBSERVATIONS_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60 * 60)  # 1 Hour
+# Idempotency cache for batch-delivered observations. Must exceed the PubSub
+# retry window (24h) so envelope redeliveries keep skipping delivered items.
+DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL = env.int("DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL", 90000)
 
 # Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")

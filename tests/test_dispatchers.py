@@ -11,9 +11,11 @@ from core.dispatchers import (
     EREventAttachmentDispatcher,
     EREventUpdateDispatcher,
     ERObservationDispatcher,
+    ERObservationsBatchDispatcher,
 )
 from core.errors import DispatcherException
 from core.event_handlers import dispatch_transformed_observation_v2
+from gundi_core.schemas.v2 import ERObservation
 
 
 async def _test_dispatcher_on_errors(
@@ -288,3 +290,85 @@ async def test_v2_dispatcher_does_not_retry_static_token_client_on_bad_credentia
 
     assert erclient_mock.post_report.await_count == 1
     mock_cache_empty.delete.assert_not_called()
+
+
+class _RebuggyFakeERClient:
+    """A double for erclient's AsyncERClient that faithfully reproduces the
+    real 1.16.0 `post_sensor_observation` parameter-rebinding bug (it posts
+    only the LAST element of a list, see core/dispatchers.py's
+    ERObservationsBatchDispatcher._send comment). A permissive MagicMock
+    can't catch a regression back to calling post_sensor_observation with a
+    list, because it would happily "accept" the list without exercising the
+    real library's buggy loop. This double does, by actually reimplementing
+    that loop.
+    """
+
+    def __init__(self, provider_key=None):
+        self.provider_key = provider_key
+        self.service_root = "https://fake-site.pamdas.org/api/v1.0"
+        self.username = None
+        self.posted_payloads = []  # every payload handed to _post
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def _clean_observation(self, observation):
+        if hasattr(observation.get("recorded_at"), "isoformat"):
+            observation["recorded_at"] = observation["recorded_at"].isoformat()
+        return observation
+
+    async def _post(self, path, payload, params=None):
+        self.posted_payloads.append(payload)
+        return {"result": "ok"}
+
+    async def post_sensor_observation(self, observation, sensor_type="generic"):
+        # Faithful reproduction of erclient 1.16.0's bug: `observation` gets
+        # rebound by the loop, so only the last item is ever posted.
+        observations_list = observation if isinstance(observation, (list, set)) else [observation]
+        for observation in observations_list:
+            self._clean_observation(observation)
+        return await self._post(
+            f"sensors/{sensor_type}/{self.provider_key}/status", payload=observation
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_dispatcher_posts_full_list_not_just_last_item(
+    mocker,
+    destination_integration_v2,
+):
+    # C1 regression test: assert the payload ACTUALLY handed to the client
+    # is the full list of observations, using a double that reproduces
+    # erclient's real bug instead of a permissive MagicMock (which would
+    # hide this class of bug entirely).
+    fake_client = _RebuggyFakeERClient()
+    mocker.patch(
+        "core.dispatchers.TokenCachingAsyncERClient",
+        mocker.MagicMock(return_value=fake_client),
+    )
+    observations = [
+        ERObservation(
+            manufacturer_id=f"device-{i}",
+            source_type="tracking-device",
+            subject_name=f"subject-{i}",
+            recorded_at="2026-07-22 11:51:05+00:00",
+            location={"lon": -72.7, "lat": -51.6},
+            additional={"speed_kmph": 30},
+        )
+        for i in range(3)
+    ]
+    dispatcher = ERObservationsBatchDispatcher(
+        integration=destination_integration_v2, provider="test_provider"
+    )
+
+    await dispatcher.send(observations)
+
+    # Exactly one post, and it carries all 3 items - not just the last one.
+    assert len(fake_client.posted_payloads) == 1
+    posted = fake_client.posted_payloads[0]
+    assert isinstance(posted, list)
+    assert len(posted) == 3
+    assert [o["manufacturer_id"] for o in posted] == ["device-0", "device-1", "device-2"]
