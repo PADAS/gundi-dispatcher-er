@@ -52,6 +52,9 @@ ER_TOKEN_CACHE_SECRET = env.str("ER_TOKEN_CACHE_SECRET", "")
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 DISPATCHED_OBSERVATIONS_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60 * 60)  # 1 Hour
+# Idempotency cache for batch-delivered observations. Must exceed the PubSub
+# retry window (24h) so envelope redeliveries keep skipping delivered items.
+DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL = env.int("DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL", 90000)
 
 # Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
@@ -83,3 +86,10 @@ THROTTLE_COOLDOWN_BASE_SECONDS = env.int("THROTTLE_COOLDOWN_BASE_SECONDS", 30)
 THROTTLE_COOLDOWN_MAX_SECONDS = env.int("THROTTLE_COOLDOWN_MAX_SECONDS", 600)
 THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS = env.int("THROTTLE_COOLDOWN_LEVEL_TTL_SECONDS", 900)
 THROTTLE_NOTIFY_TTL_SECONDS = env.int("THROTTLE_NOTIFY_TTL_SECONDS", 300)
+
+# Batch delivery (see cdip repo: docs/superpowers/specs/2026-07-29-pipeline-batch-envelope-design.md)
+# Max observations per single ER bulk request. Independent from the envelope
+# size chosen upstream; an envelope larger than this is posted in sub-chunks.
+# max(1, ...): a zero/negative misconfiguration would make the chunking step
+# (range with step=ER_BULK_SIZE) raise at runtime.
+ER_BULK_SIZE = max(1, env.int("ER_BULK_SIZE", 200))

@@ -267,6 +267,9 @@ def mock_erclient_class(
     erclient_mock.close.return_value = async_return(
         er_client_close_response
     )
+    # ERObservationsBatchDispatcher._send bypasses post_sensor_observation
+    # (see C1 fix note in core/dispatchers.py) and calls _post directly.
+    erclient_mock._post.return_value = async_return(post_sensor_observation_response)
     erclient_mock.__aenter__.return_value = erclient_mock
     erclient_mock.__aexit__.return_value = er_client_close_response
     mocked_erclient_class.return_value = erclient_mock

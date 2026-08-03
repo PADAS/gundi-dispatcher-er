@@ -22,7 +22,7 @@ from core.utils import (
 from .errors import DispatcherException, ReferenceDataError
 from . import tracing
 from . import settings
-from .event_handlers import event_handlers, event_schemas
+from .event_handlers import event_handlers, event_schemas, publish_batch_dead_lettered_notice
 
 
 logger = logging.getLogger(__name__)
@@ -400,16 +400,27 @@ async def process_request(request):
             current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(transformed_observation, attributes)
             if attributes.get("gundi_version", "v1") == "v2":
-                await publish_retries_exhausted_event(attributes)
+                if attributes.get("batch") == "true":
+                    # publish_retries_exhausted_event requires a gundi_id,
+                    # which batch envelopes don't carry in their attributes -
+                    # without this, a batch age-out is completely silent.
+                    await publish_batch_dead_lettered_notice(attributes)
+                else:
+                    await publish_retries_exhausted_event(attributes)
             return  # Skip the event
         # Process the event according to the gundi version
         if attributes.get("gundi_version", "v1") == "v2":
             # Admission gate: defer over-cap / cooling-down destinations.
             # Runs after the too-old check above so exhausted messages always
             # dead-letter instead of being nacked past PubSub retention.
+            try:
+                admission_amount = int(attributes.get("batch_count") or 1)
+            except (TypeError, ValueError):
+                admission_amount = 1
             await throttling.check_admission(
                 destination_id=attributes.get("destination_id"),
                 stream_type=attributes.get("stream_type"),
+                amount=admission_amount,
             )
             await process_transformer_event_v2(transformed_observation, attributes)
         else:  # Default to v1

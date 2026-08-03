@@ -2,7 +2,7 @@ functions-framework==3.*
 walrus==0.9.5
 earthranger-client==1.16.0
 https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.5.6/cdip_connector-1.5.6-py3-none-any.whl
-gundi-core==1.11.2
+gundi-core==1.13.0
 gundi-client==1.0.4
 gundi-client-v2==2.4.0
 opentelemetry-api==1.14.0

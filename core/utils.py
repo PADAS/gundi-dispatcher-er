@@ -366,7 +366,13 @@ async def get_dispatched_observation(gundi_id: str, destination_id: str) -> gund
 
 def cache_dispatched_observation(
         observation: gundi_schemas_v2.DispatchedObservation,
+        ttl: int = None,
 ):
+    # Defined before the try so the except handlers below can always
+    # reference it, even when the failure happens while reading the
+    # observation's fields (an undefined extra_dict would otherwise raise
+    # UnboundLocalError and mask the original error).
+    extra_dict = {}
     try:
         gundi_id = str(observation.gundi_id)
         destination_id = str(observation.destination_id)
@@ -381,7 +387,7 @@ def cache_dispatched_observation(
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
         _cache_db.setex(
             name=cache_key,
-            time=settings.DISPATCHED_OBSERVATIONS_CACHE_TTL,
+            time=ttl if ttl is not None else settings.DISPATCHED_OBSERVATIONS_CACHE_TTL,
             value=observation.json()
         )
     except redis_exceptions.ConnectionError as e:
@@ -394,6 +400,20 @@ def cache_dispatched_observation(
             f"Unknown Error while writing integration configuration to Cache: {e}",
             extra=extra_dict
         )
+
+
+def is_observation_dispatched(gundi_id, destination_id) -> bool:
+    # Cache-only check used by the batch path to skip already-delivered items
+    # on envelope redelivery. Unlike get_dispatched_observation, this must NOT
+    # fall back to a portal query — a large batch would turn one cache outage
+    # into hundreds of portal calls. Fail open: worst case an item is re-posted
+    # and ER receives a duplicate observation.
+    try:
+        cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+        return bool(_cache_db.get(cache_key))
+    except Exception as e:
+        logger.warning(f"Error reading dispatched-observation cache: {e}")
+        return False
 
 
 def extract_fields_from_message(message):
