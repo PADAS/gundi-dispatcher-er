@@ -481,6 +481,7 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                         f"Bulk post rejected ({status_code}) for batch {batch.batch_id}. "
                         f"Falling back to per-item posts for {len(chunk)} items."
                     )
+                    fallback_delivered_any = False
                     for item in chunk:
                         # Fresh client per item too, for the same reason as
                         # above (each single_dispatcher.send closes its client).
@@ -498,6 +499,15 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                         else:
                             _cache_item_as_dispatched(batch, item)
                             delivered_gundi_ids.append(str(item.gundi_id))
+                            fallback_delivered_any = True
+                    if fallback_delivered_any:
+                        # A successful fallback delivery proves the site is
+                        # reachable, same as a successful bulk chunk — clear
+                        # any lingering cooldown instead of leaving the
+                        # destination throttled.
+                        throttling.record_success(
+                            destination_id=destination_id, stream_type=stream_type
+                        )
                 else:
                     # Transient: record distress, report partial progress, and
                     # nack the envelope. Redelivery skips delivered items via

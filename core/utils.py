@@ -368,6 +368,11 @@ def cache_dispatched_observation(
         observation: gundi_schemas_v2.DispatchedObservation,
         ttl: int = None,
 ):
+    # Defined before the try so the except handlers below can always
+    # reference it, even when the failure happens while reading the
+    # observation's fields (an undefined extra_dict would otherwise raise
+    # UnboundLocalError and mask the original error).
+    extra_dict = {}
     try:
         gundi_id = str(observation.gundi_id)
         destination_id = str(observation.destination_id)

@@ -90,4 +90,6 @@ THROTTLE_NOTIFY_TTL_SECONDS = env.int("THROTTLE_NOTIFY_TTL_SECONDS", 300)
 # Batch delivery (see cdip repo: docs/superpowers/specs/2026-07-29-pipeline-batch-envelope-design.md)
 # Max observations per single ER bulk request. Independent from the envelope
 # size chosen upstream; an envelope larger than this is posted in sub-chunks.
-ER_BULK_SIZE = env.int("ER_BULK_SIZE", 200)
+# max(1, ...): a zero/negative misconfiguration would make the chunking step
+# (range with step=ER_BULK_SIZE) raise at runtime.
+ER_BULK_SIZE = max(1, env.int("ER_BULK_SIZE", 200))

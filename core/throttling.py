@@ -108,6 +108,12 @@ async def check_admission(destination_id, stream_type, amount=1):
     # single-observation messages, N for batch envelopes).
     if not settings.THROTTLING_ENABLED or not destination_id:
         return
+    # Clamp so a malformed batch_count (0, negative, or non-int) can never
+    # turn INCRBY into a no-op or a decrement that corrupts the rate counter.
+    try:
+        amount = max(1, int(amount))
+    except (TypeError, ValueError):
+        amount = 1
     family = get_family(stream_type)
     try:
         admitted, reason, retry_after = _evaluate(destination_id, family, amount)
