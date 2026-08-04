@@ -20,6 +20,7 @@ from core.utils import (
     get_integration_details,
     get_dispatched_observation,
     cache_dispatched_observation,
+    mark_observation_dispatched,
     is_observation_dispatched,
     is_null,
     publish_event,
@@ -408,15 +409,9 @@ async def _publish_item_delivery_failed(batch, item, exception):
 
 
 def _cache_item_as_dispatched(batch, item):
-    cache_dispatched_observation(
-        observation=gundi_schemas_v2.DispatchedObservation(
-            gundi_id=item.gundi_id,
-            related_to=None,
-            external_id=None,  # By design: ER bulk responses carry no reliable per-item IDs
-            data_provider_id=batch.data_provider_id,
-            destination_id=batch.destination_id,
-            delivered_at=datetime.now(timezone.utc),
-        ),
+    mark_observation_dispatched(
+        gundi_id=item.gundi_id,
+        destination_id=batch.destination_id,
         # Longer TTL than the single-item path: this cache is what makes
         # envelope redelivery idempotent (see is_observation_dispatched), and
         # PubSub keeps retrying for MAX_EVENT_AGE_SECONDS (24h) - a shorter
