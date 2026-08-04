@@ -409,10 +409,10 @@ def mark_observation_dispatched(gundi_id, destination_id, ttl: int):
     # existence-checked (ER bulk responses carry no per-item IDs, so there is
     # no external_id worth storing), and at 24h+ TTLs the full
     # DispatchedObservation JSON is what fills Redis during large backfills.
-    gundi_id = str(gundi_id)
-    destination_id = str(destination_id)
     if not gundi_id or not destination_id:
         return  # Can't build the key
+    gundi_id = str(gundi_id)
+    destination_id = str(destination_id)
     try:
         cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
         _cache_db.setex(name=cache_key, time=ttl, value="1")
