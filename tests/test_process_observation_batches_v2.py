@@ -425,6 +425,33 @@ async def test_batch_items_cached_with_batch_ttl_not_single_item_ttl(
 
 
 @pytest.mark.asyncio
+async def test_batch_items_cached_as_sentinel_not_full_observation(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # Memory regression test: at 24h+ TTLs with one key per observation per
+    # destination, this cache dominates Redis during large backfills. Batch
+    # entries are only ever existence-checked (is_observation_dispatched) -
+    # ER bulk responses carry no per-item IDs, so there is no external_id
+    # worth storing - so they must be written as a 1-byte sentinel, not the
+    # full DispatchedObservation JSON.
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    setex_calls = _dispatched_observation_setex_calls(mock_cache_empty)
+    assert len(setex_calls) == 3
+    for call in setex_calls:
+        assert call.kwargs["value"] == "1"
+
+
+@pytest.mark.asyncio
 async def test_too_old_batch_publishes_dead_lettered_notice(
     mocker,
     mock_pubsub_client,

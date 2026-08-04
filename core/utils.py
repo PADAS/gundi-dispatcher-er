@@ -402,6 +402,30 @@ def cache_dispatched_observation(
         )
 
 
+def mark_observation_dispatched(gundi_id, destination_id, ttl: int):
+    # Batch-path idempotency marker. Writes a 1-byte sentinel under the same
+    # key cache_dispatched_observation uses, so is_observation_dispatched
+    # honors entries written by either path. Batch entries are only ever
+    # existence-checked (ER bulk responses carry no per-item IDs, so there is
+    # no external_id worth storing), and at 24h+ TTLs the full
+    # DispatchedObservation JSON is what fills Redis during large backfills.
+    gundi_id = str(gundi_id)
+    destination_id = str(destination_id)
+    if not gundi_id or not destination_id:
+        return  # Can't build the key
+    try:
+        cache_key = f"dispatched_observation.{gundi_id}.{destination_id}"
+        _cache_db.setex(name=cache_key, time=ttl, value="1")
+    except Exception as e:
+        logger.warning(
+            f"Error writing dispatched-observation marker to Cache: {e}",
+            extra={
+                ExtraKeys.GundiId: gundi_id,
+                ExtraKeys.OutboundIntId: destination_id,
+            },
+        )
+
+
 def is_observation_dispatched(gundi_id, destination_id) -> bool:
     # Cache-only check used by the batch path to skip already-delivered items
     # on envelope redelivery. Unlike get_dispatched_observation, this must NOT
