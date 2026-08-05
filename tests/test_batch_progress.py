@@ -1,3 +1,4 @@
+import hashlib
 from types import SimpleNamespace
 
 from core import batch_progress
@@ -50,6 +51,20 @@ def test_fingerprint_does_not_collide_across_item_boundaries():
     # Decoding A's record against B's fingerprint must fail open (empty set),
     # never silently report a match against the wrong item list.
     assert batch_progress.decode(raw, fp_b, 2) == set()
+
+
+def test_fingerprint_count_prefix_is_fixed_width():
+    # The leading item count is a 4-byte big-endian integer, not decimal text.
+    # A decimal count is variable-length, which would leave injectivity resting
+    # on an argument about the largest possible single gundi_id rather than on
+    # the encoding itself. Pinning the exact digest keeps that from silently
+    # regressing to str(len(items)).
+    expected = hashlib.sha256()
+    expected.update((1).to_bytes(4, "big"))
+    raw_id = b"id-0"
+    expected.update(len(raw_id).to_bytes(4, "big"))
+    expected.update(raw_id)
+    assert batch_progress.fingerprint(_items("id-0")) == expected.digest()[:8]
 
 
 def test_encode_sets_expected_bits():

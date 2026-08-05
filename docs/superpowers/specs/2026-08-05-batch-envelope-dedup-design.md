@@ -110,15 +110,20 @@ bytes 0..7   fingerprint = sha256(len(items) || len(id_0) || id_0 || len(id_1) |
 bytes 8..    bitmap; bit i set  <=>  batch.items[i] was delivered
 ```
 
-The fingerprint is length-prefixed (each `gundi_id`'s byte length as a 4-byte
-big-endian integer, prefixed by the item count), not delimiter-joined.
+The fingerprint is length-prefixed, not delimiter-joined: the item count as a
+4-byte big-endian integer, then each `gundi_id`'s byte length as a 4-byte
+big-endian integer followed by its bytes. Every length field is fixed-width,
+including the count — a decimal count would itself be variable-length and would
+leave injectivity resting on a side argument about the maximum size of a single
+`gundi_id`.
+
 `gundi_id` is `Union[UUID, str]` in `gundi_core`, so a non-UUID string is
 schema-legal and may itself contain `|` — a delimiter join lets two different
 item lists (e.g. `["a|b", "c"]` and `["a", "b|c"]`) hash identically, and a
 collision here means `decode()` reports a match against the wrong item list:
 a bit gets read as "delivered" for an observation that was never sent. That is
-the one outcome this design forbids. The length-prefixed encoding is
-injective, so two different ordered `gundi_id` sequences cannot collide.
+the one outcome this design forbids. Fixed-width length prefixing is a uniquely
+decodable code, so two different ordered `gundi_id` sequences cannot collide.
 
 Bit `i` indexes into the **received** `batch.items` list. The fingerprint binds
 the bitmap to the exact item-identity sequence it was computed against, which is

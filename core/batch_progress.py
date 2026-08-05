@@ -40,9 +40,14 @@ def fingerprint(items):
     the wrong item list, so a bit gets read as "delivered" for an observation
     that was never sent. That is the one outcome this design forbids; the
     length-prefixed encoding is injective, so it cannot happen.
+
+    Every length is fixed-width (4-byte big-endian), including the leading item
+    count. A decimal count would itself be variable-length, which would leave
+    the encoding injective only under a side argument about how large a single
+    `gundi_id` can get; fixed-width makes it unconditional.
     """
     h = hashlib.sha256()
-    h.update(str(len(items)).encode())
+    h.update(len(items).to_bytes(4, "big"))
     for item in items:
         raw = str(item.gundi_id).encode()
         h.update(len(raw).to_bytes(4, "big"))
