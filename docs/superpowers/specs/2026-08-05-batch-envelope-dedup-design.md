@@ -352,6 +352,17 @@ pure means the bit-level logic needs no mocking at all.
 - Optional Lua OR-merge for the concurrent-redelivery race.
 - Remove the legacy fallback, `mark_observation_dispatched`, and
   `DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL` after the window closes.
+- Consider deferring `get_integration_details()` until after the `pending`
+  calculation, so a fully-delivered redelivery needs no portal lookup and cannot
+  raise `ReferenceDataError` for work it isn't going to do. Raised by Copilot on
+  PR #46 and deliberately deferred: the ordering is pre-existing, and it is a
+  semantic change rather than a pure optimization — today such an envelope
+  nacks and reaches the DLQ at age-out, whereas reordering makes it ack
+  silently. That is arguably more correct, but it is a decision about DLQ
+  visibility and belongs in its own change with its own test, not inside a
+  Redis-cardinality fix. The payoff is also small: the config is cached at
+  `PORTAL_CONFIG_OBJECT_CACHE_TTL` (60s), and fully-delivered redeliveries only
+  happen when an attempt died between flushing progress and publishing.
 - Land `redis_memory_profiler.py` / `redis_stale_key_cleaner.py` on main in the
   `cdip` repo (currently only on `backup/redis-prod-cleanup-prerebase`).
 - ~~Determine whether the Wildlife Dynamics volume is intentional or a runaway
