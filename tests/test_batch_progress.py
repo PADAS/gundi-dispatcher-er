@@ -33,6 +33,25 @@ def test_fingerprint_is_stable_and_order_sensitive():
     assert a != batch_progress.fingerprint(_items("id-0", "id-1", "id-2", "id-3"))  # added
 
 
+def test_fingerprint_does_not_collide_across_item_boundaries():
+    # gundi_id is Union[UUID, str] in gundi_core, so a non-UUID string
+    # containing "|" is schema-legal. A delimiter join would make these two
+    # DIFFERENT item lists hash identically ("a|b" + "c" == "a" + "b|c" once
+    # joined with "|"), which would let decode() report item 0 of B ("a") as
+    # delivered because it matches A's fingerprint - a false match, which
+    # skips a never-delivered observation instead of failing open.
+    a = _items("a|b", "c")
+    b = _items("a", "b|c")
+    fp_a = batch_progress.fingerprint(a)
+    fp_b = batch_progress.fingerprint(b)
+    assert fp_a != fp_b
+
+    raw = batch_progress.encode(fp_a, {0}, 2)
+    # Decoding A's record against B's fingerprint must fail open (empty set),
+    # never silently report a match against the wrong item list.
+    assert batch_progress.decode(raw, fp_b, 2) == set()
+
+
 def test_encode_sets_expected_bits():
     fp = b"\x00" * 8
     assert batch_progress.encode(fp, {0, 1, 2}, 3)[8:] == bytes([0b00000111])
@@ -86,6 +105,16 @@ def test_decode_returns_empty_for_non_bytes_value():
     # A cache returning a str (or anything unexpected) must fail open, not raise.
     fp = b"\x04" * 8
     assert batch_progress.decode("not-bytes", fp, 3) == set()
+
+
+def test_decode_returns_empty_when_expected_fingerprint_has_wrong_length():
+    # decode() must not trust a caller-supplied fingerprint of the wrong
+    # length - it can never legitimately match a validly-encoded record, so
+    # comparing against it anyway would just be inviting a spurious match.
+    items = _items("id-0", "id-1", "id-2")
+    raw = batch_progress.encode(batch_progress.fingerprint(items), {0, 1, 2}, 3)
+    assert batch_progress.decode(raw, b"\x00" * 7, 3) == set()  # too short
+    assert batch_progress.decode(raw, b"\x00" * 9, 3) == set()  # too long
 
 
 def test_read_progress_returns_cached_value(mocker):

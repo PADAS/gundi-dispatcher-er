@@ -30,9 +30,24 @@ def progress_key(batch_id, destination_id, provider_key):
 
 
 def fingerprint(items):
-    """8-byte digest binding a record to an exact ordered item-identity list."""
-    joined = "|".join(str(item.gundi_id) for item in items)
-    return hashlib.sha256(joined.encode()).digest()[:FINGERPRINT_BYTES]
+    """8-byte digest binding a record to an exact ordered item-identity list.
+
+    Length-prefixed rather than delimiter-joined: `gundi_id` is declared as
+    `Union[UUID, str]` in gundi_core, so arbitrary strings (including ones
+    containing "|") are schema-legal. A delimiter join lets two different
+    item lists collide (e.g. ["a|b", "c"] vs ["a", "b|c"]), and a collision
+    here is not a benign duplicate - it makes decode() report a match against
+    the wrong item list, so a bit gets read as "delivered" for an observation
+    that was never sent. That is the one outcome this design forbids; the
+    length-prefixed encoding is injective, so it cannot happen.
+    """
+    h = hashlib.sha256()
+    h.update(str(len(items)).encode())
+    for item in items:
+        raw = str(item.gundi_id).encode()
+        h.update(len(raw).to_bytes(4, "big"))
+        h.update(raw)
+    return h.digest()[:FINGERPRINT_BYTES]
 
 
 def encode(fp, delivered, n):
@@ -54,6 +69,11 @@ def decode(raw, expected_fingerprint, n):
     is acceptable, a silently skipped observation is not.
     """
     try:
+        if len(expected_fingerprint) != FINGERPRINT_BYTES:
+            # A caller-supplied fingerprint of the wrong length can never
+            # match a validly-encoded record; trusting it anyway risks a
+            # spurious match on truncated/malformed input.
+            return set()
         if not raw or len(raw) < FINGERPRINT_BYTES:
             return set()
         if bytes(raw[:FINGERPRINT_BYTES]) != bytes(expected_fingerprint):
@@ -83,7 +103,7 @@ def read_progress(batch_id, destination_id, provider_key):
     try:
         return utils._cache_db.get(progress_key(batch_id, destination_id, provider_key))
     except Exception as e:
-        logger.warning(f"Error reading batch progress from cache: {e}")
+        logger.warning(f"Error reading batch progress from cache: {e}", exc_info=True)
         return None
 
 
@@ -98,4 +118,4 @@ def write_progress(batch_id, destination_id, provider_key, fp, delivered, n, ttl
             value=encode(fp, delivered, n),
         )
     except Exception as e:
-        logger.warning(f"Error writing batch progress to cache: {e}")
+        logger.warning(f"Error writing batch progress to cache: {e}", exc_info=True)

@@ -105,9 +105,19 @@ make the key length unbounded.
 A single binary string written with `SET ... EX <ttl>`:
 
 ```
-bytes 0..7   fingerprint = sha256("|".join(str(i.gundi_id) for i in batch.items))[:8]
+bytes 0..7   fingerprint = sha256(len(items) || len(id_0) || id_0 || len(id_1) || id_1 || ...)[:8]
 bytes 8..    bitmap; bit i set  <=>  batch.items[i] was delivered
 ```
+
+The fingerprint is length-prefixed (each `gundi_id`'s byte length as a 4-byte
+big-endian integer, prefixed by the item count), not delimiter-joined.
+`gundi_id` is `Union[UUID, str]` in `gundi_core`, so a non-UUID string is
+schema-legal and may itself contain `|` — a delimiter join lets two different
+item lists (e.g. `["a|b", "c"]` and `["a", "b|c"]`) hash identically, and a
+collision here means `decode()` reports a match against the wrong item list:
+a bit gets read as "delivered" for an observation that was never sent. That is
+the one outcome this design forbids. The length-prefixed encoding is
+injective, so two different ordered `gundi_id` sequences cannot collide.
 
 Bit `i` indexes into the **received** `batch.items` list. The fingerprint binds
 the bitmap to the exact item-identity sequence it was computed against, which is
@@ -134,8 +144,15 @@ if not delivered and settings.BATCH_DEDUP_LEGACY_FALLBACK_ENABLED:
 pending = [(i, item) for i, item in enumerate(batch.items) if i not in delivered]
 ```
 
-`current_span` gains a `dedup_source` attribute (`batch_progress` | `legacy` |
-`none`) so the rollout can be observed in traces.
+`current_span` gains a `dedup_source` attribute — `batch_progress` (record
+present and usable), `unusable_record` (a record was present but `decode()`
+couldn't use it: fingerprint mismatch or truncation — the one condition that
+causes a full-envelope duplicate re-post), `legacy` (no usable record, legacy
+per-item keys found one), or `none` (no record at all — the common case for a
+brand-new envelope's first delivery) — so the rollout can be observed in
+traces. `raw` is kept around specifically so `unusable_record` can be told
+apart from `none`; without it, decode's empty set alone can't distinguish
+"nothing was ever recorded" from "something was recorded but is unusable."
 
 The existing "everything already delivered" branch is preserved verbatim: when
 `pending` is empty it still publishes `ObservationsBatchDelivered` for **all**
@@ -159,8 +176,12 @@ for chunk in _chunked(pending, settings.ER_BULK_SIZE):
 
 The per-item 4xx fallback loop sets bits only for items that succeeded
 individually, then flushes once after the loop. Items that failed individually
-keep their bit unset and are retried on redelivery — identical to today, since
-those items are not cached now either.
+keep their bit unset — identical to today, since those items are not cached
+now either. This is *not* "retried on redelivery": the 4xx fallback path acks
+the envelope and publishes `ObservationDeliveryFailed` for each item that
+failed individually, so there is no redelivery for the unset bit to be
+retried on. The bit is simply accurate bookkeeping of what was never
+delivered.
 
 `write_progress` is a no-op when `delivered` is empty. An all-zero record
 carries no information and would be indistinguishable from a missing one, so
@@ -251,7 +272,7 @@ never acceptable.
 | Redis unavailable or any exception | `delivered = {}`. Matches `is_observation_dispatched`, which returns `False` on error. |
 | Value missing, truncated, or shorter than `ceil(n/8)` | Absent bits count as not delivered. |
 | `batch.items == []` | Early return, nothing written. |
-| Item fails individually in the 4xx fallback | Bit unset, retried on redelivery. Unchanged from today. |
+| Item fails individually in the 4xx fallback | Bit unset. The envelope is acked and `ObservationDeliveryFailed` is published for that item — not retried on redelivery. Unchanged from today. |
 
 Two of these deserve explicit justification.
 

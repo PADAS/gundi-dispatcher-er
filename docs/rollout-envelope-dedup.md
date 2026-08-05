@@ -8,8 +8,16 @@ legacy fallback and recreates the duplicate burst it exists to prevent.
    10 GB instance that hit 100%. Size for peak observation rate x 25h until this
    ships, then it can come back down.
 2. **Deploy** with `BATCH_DEDUP_LEGACY_FALLBACK_ENABLED=true` (the default).
-   Confirm in traces that `dedup_source` is `batch_progress` for new envelopes
-   and `legacy` for in-flight ones.
+   Check `dedup_source` in traces, but expect `none` to dominate — a brand-new
+   envelope's *first* delivery has no progress record yet, so `none` is the
+   healthy steady-state value, not a sign of failure. `batch_progress` appears
+   only on redelivery of an envelope that already flushed progress once, and
+   `unusable_record` only on a fingerprint mismatch or truncated record (rare;
+   worth investigating if it is not). `legacy` should appear only for
+   envelopes published before the deploy. The signal that actually matters
+   here is **`legacy` decaying to zero over the 25h window** — that is what
+   confirms every pre-deploy envelope has drained, not the presence of
+   `batch_progress`.
 3. **Wait at least 25h** — longer than `MAX_EVENT_AGE_SECONDS` (86400), so no
    envelope predating the deploy can still be redelivered.
 4. **Set `BATCH_DEDUP_LEGACY_FALLBACK_ENABLED=false`** and redeploy. Confirm

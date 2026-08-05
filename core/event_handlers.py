@@ -456,14 +456,20 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
             raise ReferenceDataError(error_msg)
 
         fp = batch_progress.fingerprint(batch.items)
-        delivered = batch_progress.decode(
-            batch_progress.read_progress(
-                batch.batch_id, destination_id, batch.provider_key
-            ),
-            fp,
-            len(batch.items),
-        )
-        dedup_source = "batch_progress" if delivered else "none"
+        raw = batch_progress.read_progress(batch.batch_id, destination_id, batch.provider_key)
+        delivered = batch_progress.decode(raw, fp, len(batch.items))
+        if delivered:
+            dedup_source = "batch_progress"
+        elif raw:
+            # A record was present but decode() couldn't use it - a
+            # fingerprint mismatch (envelope re-published with a different
+            # item list) or a truncated value. This is the one condition
+            # that causes a full-envelope duplicate re-post, so it gets its
+            # own telemetry value instead of being indistinguishable from a
+            # normal first delivery ("none").
+            dedup_source = "unusable_record"
+        else:
+            dedup_source = "none"
         if not delivered and settings.BATCH_DEDUP_LEGACY_FALLBACK_ENABLED:
             legacy = _legacy_delivered_indices(batch, destination_id)
             if legacy:

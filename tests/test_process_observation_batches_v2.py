@@ -534,6 +534,35 @@ async def test_too_old_batch_publishes_dead_lettered_notice(
 
 
 @pytest.mark.asyncio
+async def test_batch_with_no_items_is_a_no_op(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # Ack/nack-semantics regression test: an empty items list addressed to an
+    # UNKNOWN destination previously raised ReferenceDataError (-> nack ->
+    # eventual DLQ at age-out), because get_integration_details ran before any
+    # items check. The new `if not batch.items: return` guard runs first, so
+    # an empty batch is now a pure no-op regardless of whether the destination
+    # exists - it must return cleanly, post nothing, publish nothing, and
+    # never pay for a portal lookup it has no use for.
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    get_integration_details_mock = mocker.patch("core.event_handlers.get_integration_details")
+
+    await process_request(_make_batch_request(mocker, items_count=0))  # must not raise
+
+    assert not mock_erclient_class.return_value._post.called
+    assert not mock_erclient_class.return_value.post_sensor_observation.called
+    assert not mock_pubsub_client.PublisherClient.return_value.publish.called
+    assert not get_integration_details_mock.called
+
+
+@pytest.mark.asyncio
 async def test_batch_writes_one_progress_record_instead_of_per_item_keys(
     mocker,
     mock_cache_empty,
@@ -627,7 +656,19 @@ async def test_batch_fully_delivered_posts_nothing_but_still_publishes(
     assert not mock_erclient_class.return_value._post.called
     # The original attempt may have died after recording progress and before
     # publishing, so the delivered event must still go out for ALL items.
-    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+    publish_mock = mock_pubsub_client.PublisherClient.return_value.publish
+    assert publish_mock.called
+    # This is the only progress-path test that inspects the delivered
+    # payload itself (the legacy-path equivalent at
+    # test_batch_all_cached_redelivery_still_publishes_delivered_event is
+    # deleted along with the legacy flag) - it must carry all 3 gundi_ids,
+    # not just a truthy publish call.
+    (binary_payload,), _ = mock_pubsub_client.PubsubMessage.call_args
+    published_payload = json.loads(binary_payload)
+    assert published_payload["event_type"] == "ObservationsBatchDelivered"
+    assert sorted(published_payload["payload"]["gundi_ids"]) == sorted(
+        f"23ca4b15-18b6-4cf4-9da6-36dd69c6f63{i}" for i in range(3)
+    )
 
 
 @pytest.mark.asyncio
@@ -639,6 +680,41 @@ async def test_batch_fingerprint_mismatch_reposts_everything(
 ):
     # A record whose bits are all set, but computed over DIFFERENT item ids -
     # positional bits are meaningless, so it must fail open.
+    stale = _progress_value(3, {0, 1, 2}, gundi_ids=["other-0", "other-1", "other-2"])
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, stale)
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 3
+
+
+@pytest.mark.asyncio
+async def test_batch_unusable_record_dedup_source_reposts_everything(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # dedup_source classification (core/event_handlers.py): a fingerprint
+    # mismatch means a record WAS present (raw is truthy) but decode()
+    # couldn't use it, which must be reported as "unusable_record" rather
+    # than "none" (no record at all) - that split is the only telemetry that
+    # can distinguish the one condition causing a full-envelope duplicate
+    # re-post from an ordinary first delivery.
+    #
+    # This suite has no infrastructure for asserting on OTel span attributes
+    # (the tracer is the real SDK, configured once at module import with no
+    # in-memory exporter wired in for tests - see core/tracing/config.py), so
+    # this test asserts the observable consequence of the "unusable_record"
+    # branch instead: every item gets re-posted, exactly as a missing record
+    # would, because both classifications resolve to `delivered = set()`.
     stale = _progress_value(3, {0, 1, 2}, gundi_ids=["other-0", "other-1", "other-2"])
     mock_cache = mocker.MagicMock()
     mock_cache.get.side_effect = (None, stale)
@@ -739,7 +815,11 @@ async def test_batch_permanent_error_marks_only_individually_delivered_items(
     await process_request(_make_batch_request(mocker, items_count=3))
 
     # Items 0 and 2 succeeded individually; item 1 failed and keeps its bit
-    # unset so redelivery retries it.
+    # unset. It is NOT retried on redelivery: the 4xx fallback path acks the
+    # envelope and publishes ObservationDeliveryFailed for item 1 instead of
+    # raising, so there is no redelivery to retry it on. The bit stays unset
+    # simply because it was never delivered - correct bookkeeping, not a
+    # signal that a retry is coming.
     assert _progress_setex_calls(mock_cache_empty)[-1].kwargs["value"][8:] == bytes([0b00000101])
 
 
