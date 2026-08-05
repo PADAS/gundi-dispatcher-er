@@ -493,6 +493,18 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
             await _publish_batch_delivered(batch, [str(item.gundi_id) for item in batch.items])
             return
 
+        # Items a PREVIOUS attempt delivered (from the progress record or the
+        # legacy keys). Every publish below has to cover these too, not just
+        # this attempt's: an attempt that flushed progress and then died before
+        # publishing would otherwise leave their traces unstamped forever —
+        # exactly the loss the all-delivered branch above exists to prevent,
+        # only in the partial case. The portal handler is idempotent against
+        # repeat events, so re-reporting them is free.
+        already_delivered_gundi_ids = [
+            str(batch.items[index].gundi_id) for index in sorted(delivered)
+        ]
+        # Delivered by THIS attempt — kept separate so the delivered_count span
+        # attribute keeps meaning "what this invocation sent".
         delivered_gundi_ids = []
         for chunk in _chunked(pending, settings.ER_BULK_SIZE):
             # A fresh dispatcher (and so a fresh underlying http client) per
@@ -557,7 +569,9 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                     )
                     if notify_scope:
                         await publish_throttling_notice(attributes=attributes, scope=notify_scope)
-                    await _publish_batch_delivered(batch, delivered_gundi_ids)
+                    await _publish_batch_delivered(
+                        batch, already_delivered_gundi_ids + delivered_gundi_ids
+                    )
                     raise DispatcherException(
                         f"Transient error dispatching batch {batch.batch_id}: {error}"
                     )
@@ -569,7 +583,9 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                 throttling.record_success(destination_id=destination_id, stream_type=stream_type)
 
         current_span.set_attribute("delivered_count", len(delivered_gundi_ids))
-        await _publish_batch_delivered(batch, delivered_gundi_ids)
+        await _publish_batch_delivered(
+            batch, already_delivered_gundi_ids + delivered_gundi_ids
+        )
 
 
 async def handle_er_observations_batch(event: ObservationsBatchTransformedER, attributes: dict):

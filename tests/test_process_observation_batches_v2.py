@@ -634,6 +634,16 @@ async def test_batch_skips_items_already_marked_in_bitmap(
     assert len(posted) == 2
     # The flush unions the pre-existing bit with the newly delivered ones
     assert _progress_setex_calls(mock_cache)[-1].kwargs["value"][8:] == bytes([0b00000111])
+    # The delivered event must cover ALL 3 items, not just the 2 this attempt
+    # sent. Item 0 was delivered by a previous attempt that flushed progress and
+    # then died before publishing; if it is left out here its trace is never
+    # stamped and downstream delivery status stays permanently incomplete.
+    (binary_payload,), _ = mock_pubsub_client.PubsubMessage.call_args
+    published_payload = json.loads(binary_payload)
+    assert published_payload["event_type"] == "ObservationsBatchDelivered"
+    assert sorted(published_payload["payload"]["gundi_ids"]) == sorted(
+        f"23ca4b15-18b6-4cf4-9da6-36dd69c6f63{i}" for i in range(3)
+    )
 
 
 @pytest.mark.asyncio
