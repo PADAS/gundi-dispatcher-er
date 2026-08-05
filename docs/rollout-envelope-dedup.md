@@ -15,7 +15,7 @@ legacy fallback and recreates the duplicate burst it exists to prevent.
 4. **Set `BATCH_DEDUP_LEGACY_FALLBACK_ENABLED=false`** and redeploy. Confirm
    `dedup_source` is never `legacy`.
 5. **Optionally purge leftovers.** `dispatched_observation.*` keys expire on
-   their own within 25h of their last write; `scripts/redis_stale_key_cleaner.py`
+   their own within 25h of their last write; `cdip_admin/scripts/redis_stale_key_cleaner.py`
    in the `cdip` repo (branch `backup/redis-prod-cleanup-prerebase`) can UNLINK
    them sooner.
 6. **Scale Redis back down** once db3 is at its new steady state (~0.1-0.2 GB).
@@ -31,5 +31,7 @@ route and `CONFIG GET` is disabled):
     kubectl --context gundi-prod -n application exec -i <admin-portal-pod> \
       -c admin-portal -- python3 - < script.py
 
-db3 is the ER dispatcher's keyspace. Expect `batch_progress.*` to dominate and
-`dispatched_observation.*` to shrink to zero over 25h.
+db3 is the ER dispatcher's keyspace. Expect `batch_progress.*` to dominate, and
+`dispatched_observation.*` to shrink to a small steady-state baseline — the
+still-active single-item path writes that same key prefix at a 1h TTL — as the
+legacy batch markers age out.
