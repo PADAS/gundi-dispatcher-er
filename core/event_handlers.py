@@ -13,14 +13,13 @@ from gundi_core.events.transformers import (
 # NOTE: ObservationsBatchTransformedER lives in gundi_core.events.batches, not
 # .transformers (verified against gundi_core 1.13.0's actual module layout).
 from gundi_core.events import ObservationsBatchTransformedER
-from core import tracing, dispatchers, settings, throttling
+from core import tracing, dispatchers, settings, throttling, batch_progress
 from core.errors import ReferenceDataError, DispatcherException
 from core.utils import (
     ExtraKeys,
     get_integration_details,
     get_dispatched_observation,
     cache_dispatched_observation,
-    mark_observation_dispatched,
     is_observation_dispatched,
     is_null,
     publish_event,
@@ -408,17 +407,31 @@ async def _publish_item_delivery_failed(batch, item, exception):
     )
 
 
-def _cache_item_as_dispatched(batch, item):
-    mark_observation_dispatched(
-        gundi_id=item.gundi_id,
-        destination_id=batch.destination_id,
-        # Longer TTL than the single-item path: this cache is what makes
-        # envelope redelivery idempotent (see is_observation_dispatched), and
-        # PubSub keeps retrying for MAX_EVENT_AGE_SECONDS (24h) - a shorter
-        # TTL would silently expire the skip-cache mid-retry-window and
-        # re-post already-delivered items as duplicates.
-        ttl=settings.DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL,
+def _flush_progress(batch, destination_id, fp, delivered):
+    # One write per chunk, not per item. Called after every successful chunk so
+    # progress is durable BEFORE the transient-error branch raises to nack.
+    batch_progress.write_progress(
+        batch_id=batch.batch_id,
+        destination_id=destination_id,
+        provider_key=batch.provider_key,
+        fp=fp,
+        delivered=delivered,
+        n=len(batch.items),
+        ttl=settings.DISPATCHED_BATCH_PROGRESS_CACHE_TTL,
     )
+
+
+def _legacy_delivered_indices(batch, destination_id):
+    # Transitional: envelopes in flight when the progress record shipped carry
+    # per-item dispatched_observation keys instead. Reading them for one 25h
+    # window (> MAX_EVENT_AGE_SECONDS) keeps the deploy from re-posting
+    # everything already delivered. Deleted with the flag.
+    return {
+        index for index, item in enumerate(batch.items)
+        if is_observation_dispatched(
+            gundi_id=str(item.gundi_id), destination_id=destination_id
+        )
+    }
 
 
 async def dispatch_observations_batch_v2(batch, attributes: dict):
@@ -431,16 +444,37 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
         current_span.set_attribute("destination_id", destination_id)
         current_span.set_attribute("batch_count", len(batch.items))
 
+        if not batch.items:
+            # Empty batches are valid to parse and are a no-op by contract
+            # (see gundi_core/events/batches.py).
+            return
+
         destination_integration = await get_integration_details(integration_id=destination_id)
         if not destination_integration:
             error_msg = f"No destination config details found for destination_id {destination_id}"
             logger.error(error_msg)
             raise ReferenceDataError(error_msg)
 
+        fp = batch_progress.fingerprint(batch.items)
+        delivered = batch_progress.decode(
+            batch_progress.read_progress(
+                batch.batch_id, destination_id, batch.provider_key
+            ),
+            fp,
+            len(batch.items),
+        )
+        dedup_source = "batch_progress" if delivered else "none"
+        if not delivered and settings.BATCH_DEDUP_LEGACY_FALLBACK_ENABLED:
+            legacy = _legacy_delivered_indices(batch, destination_id)
+            if legacy:
+                delivered = legacy
+                dedup_source = "legacy"
+        current_span.set_attribute("dedup_source", dedup_source)
+
         # Skip items already delivered — makes envelope redelivery idempotent
         pending = [
-            item for item in batch.items
-            if not is_observation_dispatched(gundi_id=str(item.gundi_id), destination_id=destination_id)
+            (index, item) for index, item in enumerate(batch.items)
+            if index not in delivered
         ]
         current_span.set_attribute("pending_count", len(pending))
         if not pending:
@@ -465,7 +499,7 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                 provider=batch.provider_key,
             )
             try:
-                await dispatcher.send([item.observation for item in chunk])
+                await dispatcher.send([item.observation for _, item in chunk])
             except Exception as e:
                 status_code = getattr(e, "status_code", None)
                 error = f"{type(e).__name__}: {e}"
@@ -477,7 +511,7 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                         f"Falling back to per-item posts for {len(chunk)} items."
                     )
                     fallback_delivered_any = False
-                    for item in chunk:
+                    for index, item in chunk:
                         # Fresh client per item too, for the same reason as
                         # above (each single_dispatcher.send closes its client).
                         single_dispatcher = dispatchers.ERObservationDispatcher(
@@ -492,9 +526,10 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                             )
                             await _publish_item_delivery_failed(batch, item, item_exc)
                         else:
-                            _cache_item_as_dispatched(batch, item)
+                            delivered.add(index)
                             delivered_gundi_ids.append(str(item.gundi_id))
                             fallback_delivered_any = True
+                    _flush_progress(batch, destination_id, fp, delivered)
                     if fallback_delivered_any:
                         # A successful fallback delivery proves the site is
                         # reachable, same as a successful bulk chunk — clear
@@ -521,9 +556,10 @@ async def dispatch_observations_batch_v2(batch, attributes: dict):
                         f"Transient error dispatching batch {batch.batch_id}: {error}"
                     )
             else:
-                for item in chunk:
-                    _cache_item_as_dispatched(batch, item)
+                for index, item in chunk:
+                    delivered.add(index)
                     delivered_gundi_ids.append(str(item.gundi_id))
+                _flush_progress(batch, destination_id, fp, delivered)
                 throttling.record_success(destination_id=destination_id, stream_type=stream_type)
 
         current_span.set_attribute("delivered_count", len(delivered_gundi_ids))
