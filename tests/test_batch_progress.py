@@ -86,3 +86,53 @@ def test_decode_returns_empty_for_non_bytes_value():
     # A cache returning a str (or anything unexpected) must fail open, not raise.
     fp = b"\x04" * 8
     assert batch_progress.decode("not-bytes", fp, 3) == set()
+
+
+def test_read_progress_returns_cached_value(mocker):
+    db = mocker.MagicMock()
+    db.get.return_value = b"payload"
+    mocker.patch("core.utils._cache_db", db)
+
+    assert batch_progress.read_progress("b1", "d1", "pk") == b"payload"
+    db.get.assert_called_once_with(batch_progress.progress_key("b1", "d1", "pk"))
+
+
+def test_read_progress_returns_none_on_redis_error(mocker):
+    db = mocker.MagicMock()
+    db.get.side_effect = RuntimeError("redis down")
+    mocker.patch("core.utils._cache_db", db)
+
+    assert batch_progress.read_progress("b1", "d1", "pk") is None
+
+
+def test_write_progress_stores_encoded_record_with_ttl(mocker):
+    db = mocker.MagicMock()
+    mocker.patch("core.utils._cache_db", db)
+    fp = batch_progress.fingerprint(_items("id-0", "id-1", "id-2"))
+
+    batch_progress.write_progress("b1", "d1", "pk", fp, {0, 2}, 3, ttl=90000)
+
+    db.setex.assert_called_once_with(
+        name=batch_progress.progress_key("b1", "d1", "pk"),
+        time=90000,
+        value=fp + bytes([0b00000101]),
+    )
+
+
+def test_write_progress_is_a_noop_when_nothing_delivered(mocker):
+    # An all-zero record is indistinguishable from a missing one, so never
+    # write it - that keeps decode's empty-set result unambiguous.
+    db = mocker.MagicMock()
+    mocker.patch("core.utils._cache_db", db)
+
+    batch_progress.write_progress("b1", "d1", "pk", b"\x00" * 8, set(), 3, ttl=90000)
+
+    assert not db.setex.called
+
+
+def test_write_progress_swallows_redis_error(mocker):
+    db = mocker.MagicMock()
+    db.setex.side_effect = RuntimeError("redis down")
+    mocker.patch("core.utils._cache_db", db)
+
+    batch_progress.write_progress("b1", "d1", "pk", b"\x00" * 8, {0}, 3, ttl=90000)  # must not raise

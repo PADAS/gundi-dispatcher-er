@@ -71,3 +71,31 @@ def decode(raw, expected_fingerprint, n):
         # A cache returning an unexpected type must fail open, never raise.
         logger.warning(f"Discarding unusable batch progress record: {type(e).__name__} {e}")
         return set()
+
+
+def read_progress(batch_id, destination_id, provider_key):
+    """Raw record bytes, or None. Never raises.
+
+    Reads utils._cache_db at call time (not via a module-level import) so the
+    test suite's `mocker.patch("core.utils._cache_db", ...)` takes effect -
+    same pattern as core/throttling.py.
+    """
+    try:
+        return utils._cache_db.get(progress_key(batch_id, destination_id, provider_key))
+    except Exception as e:
+        logger.warning(f"Error reading batch progress from cache: {e}")
+        return None
+
+
+def write_progress(batch_id, destination_id, provider_key, fp, delivered, n, ttl):
+    """Persist the record. No-op when nothing was delivered. Never raises."""
+    if not delivered:
+        return
+    try:
+        utils._cache_db.setex(
+            name=progress_key(batch_id, destination_id, provider_key),
+            time=ttl,
+            value=encode(fp, delivered, n),
+        )
+    except Exception as e:
+        logger.warning(f"Error writing batch progress to cache: {e}")
