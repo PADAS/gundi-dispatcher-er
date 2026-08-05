@@ -22,6 +22,24 @@ def _dispatched_observation_setex_calls(mock_cache):
     ]
 
 
+def _progress_setex_calls(mock_cache):
+    return [
+        call for call in mock_cache.setex.call_args_list
+        if call.kwargs.get("name", "").startswith("batch_progress.")
+    ]
+
+
+def _progress_value(items_count, delivered, gundi_ids=None):
+    """Build a record matching what _make_batch_request's items fingerprint to."""
+    from types import SimpleNamespace
+
+    from core import batch_progress
+
+    ids = gundi_ids or [f"23ca4b15-18b6-4cf4-9da6-36dd69c6f63{i}" for i in range(items_count)]
+    items = [SimpleNamespace(gundi_id=g) for g in ids]
+    return batch_progress.encode(batch_progress.fingerprint(items), delivered, items_count)
+
+
 def _make_batch_request(mocker, items_count=3, provider_key="gundi_movebank_abc123"):
     destination_id = "338225f3-91f9-4fe1-b013-353a229ce504"
     data_provider_id = "ddd0946d-15b0-4308-b93d-e0470b6d33b6"
@@ -103,8 +121,11 @@ async def test_process_observations_batch_posts_one_bulk_request(
     assert isinstance(posted, list)
     assert len(posted) == 3
     assert not mock_erclient_class.return_value.post_sensor_observation.called
-    # Every item cached as dispatched
-    assert len(_dispatched_observation_setex_calls(mock_cache_empty)) == 3
+    # Delivery recorded in ONE per-envelope progress record, not per-item keys
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    progress_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(progress_calls) == 1
+    assert progress_calls[0].kwargs["value"][8:] == bytes([0b00000111])
     # One ObservationsBatchDelivered event published
     publish_mock = mock_pubsub_client.PublisherClient.return_value.publish
     assert publish_mock.called
@@ -138,11 +159,11 @@ async def test_batch_skips_already_delivered_items(
     mock_pubsub_client,
     dispatched_event,
 ):
-    # First item is a cache hit (already delivered); the other two must post.
-    # The leading None accounts for get_integration_details' own cache-miss
-    # read on the shared _cache_db mock, which runs before any per-item check.
+    # First item is a cache hit via the legacy per-item key (already
+    # delivered); the other two must post. Order of gets: config cache,
+    # progress record (miss), then one per item for the legacy sweep.
     mock_cache = mocker.MagicMock()
-    mock_cache.get.side_effect = (None, dispatched_event.json(), None, None)
+    mock_cache.get.side_effect = (None, None, dispatched_event.json(), None, None)
     mocker.patch("core.utils._cache_db", mock_cache)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
@@ -153,6 +174,9 @@ async def test_batch_skips_already_delivered_items(
     post_mock = mock_erclient_class.return_value._post
     posted = post_mock.call_args.kwargs["payload"]
     assert len(posted) == 2
+    # The envelope migrates to the new progress-record format, including the
+    # legacy-derived bit for item 0.
+    assert _progress_setex_calls(mock_cache)[-1].kwargs["value"][8:] == bytes([0b00000111])
 
 
 @pytest.mark.asyncio
@@ -213,7 +237,12 @@ async def test_batch_400_falls_back_to_per_item_and_acks(
 
     assert bulk_post_mock.call_count == 1
     assert item_post_mock.call_count == 3
-    assert len(_dispatched_observation_setex_calls(mock_cache_empty)) == 2  # only the two successes cached
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    # Items 0 and 2 succeeded individually; item 1 failed and keeps its bit
+    # unset in the progress record.
+    progress_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(progress_calls) == 1
+    assert progress_calls[-1].kwargs["value"][8:] == bytes([0b00000101])
 
 
 class _CloseOnceERClient:
@@ -288,8 +317,12 @@ async def test_batch_uses_a_fresh_client_per_chunk(
     all_posted = [item for client in created_clients for item in client.posted_payloads]
     assert len(all_posted) == 2  # one post per chunk
     assert sum(len(payload) for payload in all_posted) == 3  # 2 + 1 items total
-    # Every item cached as dispatched proves both chunks succeeded
-    assert len(_dispatched_observation_setex_calls(mock_cache_empty)) == 3
+    # One progress flush per chunk, and the final record proves both chunks
+    # succeeded (all 3 bits set).
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    progress_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(progress_calls) == 2
+    assert progress_calls[-1].kwargs["value"][8:] == bytes([0b00000111])
 
 
 @pytest.mark.asyncio
@@ -330,7 +363,11 @@ async def test_batch_400_fallback_uses_a_fresh_client_per_item(
 
     # 1 client for the failed bulk attempt + 1 fresh client per fallback item
     assert len(created_clients) == 4
-    assert len(_dispatched_observation_setex_calls(mock_cache_empty)) == 3
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    # All 3 items delivered individually, recorded in one progress flush
+    progress_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(progress_calls) == 1
+    assert progress_calls[-1].kwargs["value"][8:] == bytes([0b00000111])
 
 
 @pytest.mark.asyncio
@@ -405,11 +442,11 @@ async def test_batch_items_cached_with_batch_ttl_not_single_item_ttl(
     mock_erclient_class,
     mock_pubsub_client,
 ):
-    # I-cache-TTL regression test: batch-delivered items must be cached with
-    # DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL (>= the 24h PubSub retry
-    # window), not the 1h single-item TTL - otherwise a redelivered envelope
-    # can silently re-post already-delivered items once the cache expires
-    # mid-retry-window.
+    # I-cache-TTL regression test: the per-envelope progress record must be
+    # cached with DISPATCHED_BATCH_PROGRESS_CACHE_TTL (>= the 24h PubSub
+    # retry window), not a shorter single-item TTL - otherwise a redelivered
+    # envelope can silently re-post already-delivered items once the record
+    # expires mid-retry-window.
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
@@ -417,15 +454,15 @@ async def test_batch_items_cached_with_batch_ttl_not_single_item_ttl(
 
     await process_request(_make_batch_request(mocker, items_count=3))
 
-    setex_calls = _dispatched_observation_setex_calls(mock_cache_empty)
-    assert len(setex_calls) == 3
+    setex_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(setex_calls) == 1
     for call in setex_calls:
-        assert call.kwargs["time"] == settings.DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL
-        assert settings.DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL >= settings.MAX_EVENT_AGE_SECONDS
+        assert call.kwargs["time"] == settings.DISPATCHED_BATCH_PROGRESS_CACHE_TTL
+        assert settings.DISPATCHED_BATCH_PROGRESS_CACHE_TTL >= settings.MAX_EVENT_AGE_SECONDS
 
 
 @pytest.mark.asyncio
-async def test_batch_items_cached_as_sentinel_not_full_observation(
+async def test_batch_items_cached_as_compact_bitmap_not_per_item_keys(
     mocker,
     mock_cache_empty,
     mock_gundi_client_v2_class,
@@ -433,11 +470,10 @@ async def test_batch_items_cached_as_sentinel_not_full_observation(
     mock_pubsub_client,
 ):
     # Memory regression test: at 24h+ TTLs with one key per observation per
-    # destination, this cache dominates Redis during large backfills. Batch
-    # entries are only ever existence-checked (is_observation_dispatched) -
-    # ER bulk responses carry no per-item IDs, so there is no external_id
-    # worth storing - so they must be written as a 1-byte sentinel, not the
-    # full DispatchedObservation JSON.
+    # destination, this cache used to dominate Redis during large backfills
+    # (see the 2026-08-05 incident: 33.7M keys, 10 GB). Delivery is now
+    # recorded in ONE compact fingerprint+bitmap record per envelope instead
+    # of N per-item sentinel keys.
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
     mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
@@ -445,10 +481,14 @@ async def test_batch_items_cached_as_sentinel_not_full_observation(
 
     await process_request(_make_batch_request(mocker, items_count=3))
 
-    setex_calls = _dispatched_observation_setex_calls(mock_cache_empty)
-    assert len(setex_calls) == 3
-    for call in setex_calls:
-        assert call.kwargs["value"] == "1"
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    setex_calls = _progress_setex_calls(mock_cache_empty)
+    assert len(setex_calls) == 1
+    value = setex_calls[0].kwargs["value"]
+    assert isinstance(value, bytes)
+    # 8-byte fingerprint + 1-byte bitmap for 3 items - far smaller than N
+    # per-item JSON records.
+    assert len(value) == 9
 
 
 @pytest.mark.asyncio
@@ -491,3 +531,373 @@ async def test_too_old_batch_publishes_dead_lettered_notice(
     from gundi_core.schemas.v2 import LogLevel
     assert event.payload.level == LogLevel.ERROR
     assert call_kwargs["topic_name"] == settings.DISPATCHER_EVENTS_TOPIC
+
+
+@pytest.mark.asyncio
+async def test_batch_with_no_items_is_a_no_op(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # Ack/nack-semantics regression test: an empty items list addressed to an
+    # UNKNOWN destination previously raised ReferenceDataError (-> nack ->
+    # eventual DLQ at age-out), because get_integration_details ran before any
+    # items check. The new `if not batch.items: return` guard runs first, so
+    # an empty batch is now a pure no-op regardless of whether the destination
+    # exists - it must return cleanly, post nothing, publish nothing, and
+    # never pay for a portal lookup it has no use for.
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    get_integration_details_mock = mocker.patch("core.event_handlers.get_integration_details")
+
+    await process_request(_make_batch_request(mocker, items_count=0))  # must not raise
+
+    assert not mock_erclient_class.return_value._post.called
+    assert not mock_erclient_class.return_value.post_sensor_observation.called
+    assert not mock_pubsub_client.PublisherClient.return_value.publish.called
+    assert not get_integration_details_mock.called
+
+
+@pytest.mark.asyncio
+async def test_batch_writes_one_progress_record_instead_of_per_item_keys(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    assert _dispatched_observation_setex_calls(mock_cache_empty) == []
+    calls = _progress_setex_calls(mock_cache_empty)
+    assert len(calls) == 1
+    assert calls[0].kwargs["time"] == settings.DISPATCHED_BATCH_PROGRESS_CACHE_TTL
+    assert calls[0].kwargs["value"][8:] == bytes([0b00000111])
+
+
+@pytest.mark.asyncio
+async def test_batch_reads_progress_once_not_per_item(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=25))
+
+    progress_reads = [
+        call for call in mock_cache_empty.get.call_args_list
+        if str(call.args[0]).startswith("batch_progress.")
+    ]
+    assert len(progress_reads) == 1
+    assert not any(
+        str(call.args[0]).startswith("dispatched_observation.")
+        for call in mock_cache_empty.get.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_skips_items_already_marked_in_bitmap(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # Leading None is get_integration_details' own config-cache miss.
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, _progress_value(3, {0}))
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 2
+    # The flush unions the pre-existing bit with the newly delivered ones
+    assert _progress_setex_calls(mock_cache)[-1].kwargs["value"][8:] == bytes([0b00000111])
+    # The delivered event must cover ALL 3 items, not just the 2 this attempt
+    # sent. Item 0 was delivered by a previous attempt that flushed progress and
+    # then died before publishing; if it is left out here its trace is never
+    # stamped and downstream delivery status stays permanently incomplete.
+    (binary_payload,), _ = mock_pubsub_client.PubsubMessage.call_args
+    published_payload = json.loads(binary_payload)
+    assert published_payload["event_type"] == "ObservationsBatchDelivered"
+    assert sorted(published_payload["payload"]["gundi_ids"]) == sorted(
+        f"23ca4b15-18b6-4cf4-9da6-36dd69c6f63{i}" for i in range(3)
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_fully_delivered_posts_nothing_but_still_publishes(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, _progress_value(3, {0, 1, 2}))
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    assert not mock_erclient_class.return_value._post.called
+    # The original attempt may have died after recording progress and before
+    # publishing, so the delivered event must still go out for ALL items.
+    publish_mock = mock_pubsub_client.PublisherClient.return_value.publish
+    assert publish_mock.called
+    # This is the only progress-path test that inspects the delivered
+    # payload itself (the legacy-path equivalent at
+    # test_batch_all_cached_redelivery_still_publishes_delivered_event is
+    # deleted along with the legacy flag) - it must carry all 3 gundi_ids,
+    # not just a truthy publish call.
+    (binary_payload,), _ = mock_pubsub_client.PubsubMessage.call_args
+    published_payload = json.loads(binary_payload)
+    assert published_payload["event_type"] == "ObservationsBatchDelivered"
+    assert sorted(published_payload["payload"]["gundi_ids"]) == sorted(
+        f"23ca4b15-18b6-4cf4-9da6-36dd69c6f63{i}" for i in range(3)
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_fingerprint_mismatch_reposts_everything(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # A record whose bits are all set, but computed over DIFFERENT item ids -
+    # positional bits are meaningless, so it must fail open.
+    stale = _progress_value(3, {0, 1, 2}, gundi_ids=["other-0", "other-1", "other-2"])
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, stale)
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 3
+
+
+@pytest.mark.asyncio
+async def test_batch_unusable_record_dedup_source_reposts_everything(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    # dedup_source classification (core/event_handlers.py): a fingerprint
+    # mismatch means a record WAS present (raw is truthy) but decode()
+    # couldn't use it, which must be reported as "unusable_record" rather
+    # than "none" (no record at all) - that split is the only telemetry that
+    # can distinguish the one condition causing a full-envelope duplicate
+    # re-post from an ordinary first delivery.
+    #
+    # This suite has no infrastructure for asserting on OTel span attributes
+    # (the tracer is the real SDK, configured once at module import with no
+    # in-memory exporter wired in for tests - see core/tracing/config.py), so
+    # this test asserts the observable consequence of the "unusable_record"
+    # branch instead: every item gets re-posted, exactly as a missing record
+    # would, because both classifications resolve to `delivered = set()`.
+    stale = _progress_value(3, {0, 1, 2}, gundi_ids=["other-0", "other-1", "other-2"])
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, stale)
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 3
+
+
+@pytest.mark.asyncio
+async def test_batch_flushes_progress_per_chunk(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "ER_BULK_SIZE", 2)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    calls = _progress_setex_calls(mock_cache_empty)
+    assert len(calls) == 2  # one per chunk
+    assert calls[0].kwargs["value"][8:] == bytes([0b00000011])
+    assert calls[1].kwargs["value"][8:] == bytes([0b00000111])
+
+
+@pytest.mark.asyncio
+async def test_batch_persists_progress_before_raising_on_transient_error(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "ER_BULK_SIZE", 2)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+    from tests.conftest import async_return
+    err = ERClientException("ER error ON POST: service unavailable")
+    err.status_code = 503
+    # First chunk's bulk _post must return an awaitable (a coroutine, via
+    # async_return) to represent success - a bare None isn't awaitable and
+    # would make chunk 1 itself raise, defeating the point of this test.
+    mock_erclient_class.return_value._post.side_effect = [async_return(None), err]
+
+    with pytest.raises(Exception):
+        await process_request(_make_batch_request(mocker, items_count=3))
+
+    # Chunk 1's progress must be durable before the nack, or redelivery
+    # re-posts it.
+    calls = _progress_setex_calls(mock_cache_empty)
+    assert len(calls) == 1
+    assert calls[0].kwargs["value"][8:] == bytes([0b00000011])
+
+
+@pytest.mark.asyncio
+async def test_batch_permanent_error_marks_only_individually_delivered_items(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+    from tests.conftest import async_return
+    bulk_err = ERClientException("ER error ON POST: bad request")
+    bulk_err.status_code = 400
+    mock_erclient_class.return_value._post.side_effect = bulk_err
+    item_err = ERClientException("ER error: bad record")
+    item_err.status_code = 400
+    # Successful per-item posts must be awaitables (async_return), not bare
+    # None - a bare None isn't awaitable and would make every fallback item
+    # raise TypeError, masking the one genuine per-item failure this test
+    # is about.
+    mock_erclient_class.return_value.post_sensor_observation.side_effect = [
+        async_return(None), item_err, async_return(None)
+    ]
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    # Items 0 and 2 succeeded individually; item 1 failed and keeps its bit
+    # unset. It is NOT retried on redelivery: the 4xx fallback path acks the
+    # envelope and publishes ObservationDeliveryFailed for item 1 instead of
+    # raising, so there is no redelivery to retry it on. The bit stays unset
+    # simply because it was never delivered - correct bookkeeping, not a
+    # signal that a retry is coming.
+    assert _progress_setex_calls(mock_cache_empty)[-1].kwargs["value"][8:] == bytes([0b00000101])
+
+
+@pytest.mark.asyncio
+async def test_batch_falls_back_to_legacy_per_item_keys(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+    dispatched_event,
+):
+    # No progress record; legacy key present for item 0 only. Order of gets:
+    # config cache, progress, then one per item for the legacy sweep.
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (None, None, dispatched_event.json(), None, None)
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", True)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 2
+    # The envelope migrates to the new format, including the legacy-derived bit
+    assert _progress_setex_calls(mock_cache)[-1].kwargs["value"][8:] == bytes([0b00000111])
+
+
+@pytest.mark.asyncio
+async def test_batch_does_not_read_legacy_keys_when_fallback_disabled(
+    mocker,
+    mock_cache_empty,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))
+
+    assert not any(
+        str(call.args[0]).startswith("dispatched_observation.")
+        for call in mock_cache_empty.get.call_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_batch_delivers_normally_when_cache_read_and_write_fail(
+    mocker,
+    mock_gundi_client_v2_class,
+    mock_erclient_class,
+    mock_pubsub_client,
+):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = None
+    mock_cache.setex.side_effect = RuntimeError("redis down")
+    mocker.patch("core.utils._cache_db", mock_cache)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    mocker.patch("core.dispatchers.TokenCachingAsyncERClient", mock_erclient_class)
+    mocker.patch("core.utils.pubsub", mock_pubsub_client)
+    mocker.patch.object(settings, "BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", False)
+
+    await process_request(_make_batch_request(mocker, items_count=3))  # must not raise
+
+    posted = mock_erclient_class.return_value._post.call_args.kwargs["payload"]
+    assert len(posted) == 3

@@ -55,6 +55,17 @@ DISPATCHED_OBSERVATIONS_CACHE_TTL = env.int("DISPATCHED_OBSERVATIONS_CACHE_TTL",
 # Idempotency cache for batch-delivered observations. Must exceed the PubSub
 # retry window (24h) so envelope redeliveries keep skipping delivered items.
 DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL = env.int("DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL", 90000)
+# Idempotency record for batch-delivered observations: ONE key per envelope
+# holding an item-sequence fingerprint plus a delivered-item bitmap. Must
+# exceed the PubSub retry window (MAX_EVENT_AGE_SECONDS, 86400 in prod) so
+# envelope redeliveries keep skipping delivered items. Replaces the per-item
+# dispatched_observation keys that filled prod Redis on 2026-08-05.
+DISPATCHED_BATCH_PROGRESS_CACHE_TTL = env.int("DISPATCHED_BATCH_PROGRESS_CACHE_TTL", 90000)
+# Transitional: when an envelope has no progress record, fall back to reading
+# the legacy per-item dispatched_observation keys. Stops the deploy from
+# re-posting everything already delivered for envelopes in flight at rollout.
+# Set false >=25h after deploy, then delete the fallback (see the design doc).
+BATCH_DEDUP_LEGACY_FALLBACK_ENABLED = env.bool("BATCH_DEDUP_LEGACY_FALLBACK_ENABLED", True)
 
 # Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")

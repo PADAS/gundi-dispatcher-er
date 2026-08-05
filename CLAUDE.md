@@ -76,13 +76,26 @@ Deploys a gen2 Cloud Function in `us-central1` triggered by `google.cloud.pubsub
 
 `DispatcherException` and `ReferenceDataError` are re-raised so GCP PubSub retries (function is deployed with `--retry`). The destination portal/EDA is informed via `publish_event()` to `DISPATCHER_EVENTS_TOPIC` for both success and failure paths — this is how the portal's delivery status UI stays up to date.
 
-### Redis usage (`core/utils.py`)
+### Redis usage (`core/utils.py`, `core/batch_progress.py`)
 
 - `_cache_db` wraps a `walrus.Database` (DB `REDIS_DB`, default `3`).
 - Portal config lookups (outbound configs, inbound integrations, v2 Integration details) are cached for `PORTAL_CONFIG_OBJECT_CACHE_TTL` (default 60s).
 - Dispatched v2 observations are cached for `DISPATCHED_OBSERVATIONS_CACHE_TTL` (default 1h) keyed by `gundi_id` + `destination_id` — required for event-update and attachment flows.
 - Cache reads/writes are wrapped in `read_config_from_cache_safe`/`write_config_in_cache_safe` so Redis connection issues log a warning and fall through to the portal API rather than erroring.
 - ER auth tokens from password grants are cached under `er_dispatcher.auth_token.{host}.{username}.{credential-fingerprint}` (fingerprint = `sha256(username:password)[:16]`, so a wrong password is always a cache miss) with TTL matching token expiry (~48h), so dispatch does not perform an OAuth2 grant per message. Entries are Fernet-encrypted under a key derived from the credentials plus the optional `ER_TOKEN_CACHE_SECRET` env var — Redis contents alone can't be read or forged; undecryptable entries are discarded as misses. Static-token integrations bypass this cache.
+- **Batch idempotency** (`core/batch_progress.py`): ONE key per envelope,
+  `batch_progress.{batch_id}.{destination_id}.{sha256(provider_key)[:8]}`, whose
+  value is an 8-byte item-sequence fingerprint followed by a delivered-item
+  bitmap. TTL `DISPATCHED_BATCH_PROGRESS_CACHE_TTL` (90000s) must exceed
+  `MAX_EVENT_AGE_SECONDS`. This replaced one `dispatched_observation.*` key per
+  observation, which filled prod Redis on 2026-08-05 (33.7M keys / 10 GB).
+  `provider_key` is part of the key because cdip-routing groups items per
+  `(destination, effective_provider_key)`.
+- The fingerprint exists because cdip-routing can re-publish the same
+  `batch_id` with a different item list; a mismatch fails open and re-posts.
+- **The single-item path still writes per-observation keys** at
+  `DISPATCHED_OBSERVATIONS_CACHE_TTL` (1h) — `get_dispatched_observation` needs
+  the stored `external_id` to resolve `related_to` for attachments.
 
 ### Tracing
 
@@ -98,6 +111,7 @@ OpenTelemetry tracing is wired in `core/tracing/__init__.py`. When `TRACING_ENAB
 | `core/dispatchers.py` | `ERDispatcher*` classes per stream type; builds `AsyncERClient` from integration config |
 | `core/er_auth.py` | `TokenCachingAsyncERClient` — Redis-cached ER auth tokens, backoff-retried password grants; 401 → invalidate + one retry (see `docs/superpowers/specs/2026-07-27-er-token-caching-design.md`) |
 | `core/utils.py` | Portal API wrappers, Redis caching, `publish_event`, `extract_fields_from_message`, `find_config_for_action` |
+| `core/batch_progress.py` | Per-envelope redelivery-dedup records (pure encode/decode plus never-raising Redis accessors) |
 | `core/settings.py` | All env-var-driven settings, DLQ topic names |
 | `core/tracing/` | OpenTelemetry setup and PubSub trace-context propagation |
 | `tests/conftest.py` | Large shared fixture set — all external services (Gundi portal, PubSub, Redis, ER API) are mocked |
@@ -120,3 +134,5 @@ Tests use `pytest-asyncio` + `pytest-mock`. Structure mirrors the module under t
 | `MAX_EVENT_AGE_SECONDS` | Drop-to-DLQ threshold (default 86400) |
 | `TRACING_ENABLED` / `TRACE_ENVIRONMENT` | OpenTelemetry toggle + env label |
 | `BUCKET_NAME` / `CLOUD_STORAGE_TYPE` | Used by attachment/camera-trap dispatchers to fetch files before POSTing to ER |
+| `DISPATCHED_BATCH_PROGRESS_CACHE_TTL` | Batch dedup record lifetime; must exceed `MAX_EVENT_AGE_SECONDS` (default 90000) |
+| `BATCH_DEDUP_LEGACY_FALLBACK_ENABLED` | Transitional; read legacy per-item keys when an envelope has no progress record (default true) |

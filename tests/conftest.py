@@ -7,7 +7,7 @@ import pytest
 import asyncio
 from erclient import er_errors
 from gundi_core.events import EventTransformedER, ObservationTransformedER, AttachmentTransformedER, \
-    EventUpdateTransformedER
+    EventUpdateTransformedER, ObservationsBatchTransformedER
 from gundi_core.schemas import OutboundConfiguration
 from gundi_core.schemas.v2 import EREvent
 from redis import exceptions as redis_exceptions
