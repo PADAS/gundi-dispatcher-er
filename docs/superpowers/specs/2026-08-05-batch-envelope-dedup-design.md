@@ -59,8 +59,9 @@ The `5b93c84` sentinel fix did help — 223 B observed versus ~380 B for the ful
   trade-offs").
 - Today's saturation. Scaling the instance is a separate, more urgent operational
   action; this design fixes the steady state.
-- Whether the Wildlife Dynamics volume is a runaway backfill. Independent
-  investigation.
+- The Wildlife Dynamics volume itself. Resolved 2026-08-05: it is intentional,
+  and it is a large backfill rather than sustained traffic — so ~470 keys/s is a
+  recurring-but-transient peak, not a new baseline. Nothing to chase.
 
 ## Design
 
@@ -338,5 +339,10 @@ pure means the bit-level logic needs no mocking at all.
   `DISPATCHED_OBSERVATIONS_BATCH_CACHE_TTL` after the window closes.
 - Land `redis_memory_profiler.py` / `redis_stale_key_cleaner.py` on main in the
   `cdip` repo (currently only on `backup/redis-prod-cleanup-prerebase`).
-- Determine whether the Wildlife Dynamics volume is intentional or a runaway
-  backfill.
+- ~~Determine whether the Wildlife Dynamics volume is intentional or a runaway
+  backfill.~~ Resolved 2026-08-05: intentional, and a large backfill rather than
+  sustained volume. The sizing rule that follows is to size for peak *backfill*
+  rate x TTL, not for average traffic — which is exactly what this design makes
+  cheap: the same backfill costs ~0.12 GB here versus ~9.4 GB projected under the
+  per-observation scheme, so a backfill of this size stops being a capacity event
+  and the instance needs no permanent oversizing.
