@@ -38,13 +38,23 @@ def fingerprint(items):
     item lists collide (e.g. ["a|b", "c"] vs ["a", "b|c"]), and a collision
     here is not a benign duplicate - it makes decode() report a match against
     the wrong item list, so a bit gets read as "delivered" for an observation
-    that was never sent. That is the one outcome this design forbids; the
-    length-prefixed encoding is injective, so it cannot happen.
+    that was never sent. That is the one outcome this design forbids, so the
+    encoding is built to be injective: no two different ordered id sequences
+    produce the same bytes to hash.
 
     Every length is fixed-width (4-byte big-endian), including the leading item
     count. A decimal count would itself be variable-length, which would leave
     the encoding injective only under a side argument about how large a single
     `gundi_id` can get; fixed-width makes it unconditional.
+
+    Injective *encoding* is not a collision-free *digest* — this truncates
+    SHA-256 to 8 bytes, so two distinct inputs can still collide at ~2^-64.
+    What makes that acceptable is scope: a fingerprint is only ever compared
+    against records under the same `(batch_id, destination_id, provider_key)`
+    key, and only a handful of item lists ever exist for one key within its 25h
+    lifetime. So the exposure is ~2^-64 per comparison, not a birthday problem
+    across every envelope in the system. Widen FINGERPRINT_BYTES if that
+    scoping assumption ever stops holding.
     """
     h = hashlib.sha256()
     h.update(len(items).to_bytes(4, "big"))

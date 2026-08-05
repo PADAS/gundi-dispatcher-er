@@ -123,7 +123,17 @@ item lists (e.g. `["a|b", "c"]` and `["a", "b|c"]`) hash identically, and a
 collision here means `decode()` reports a match against the wrong item list:
 a bit gets read as "delivered" for an observation that was never sent. That is
 the one outcome this design forbids. Fixed-width length prefixing is a uniquely
-decodable code, so two different ordered `gundi_id` sequences cannot collide.
+decodable code, so two different ordered `gundi_id` sequences never produce the
+same bytes to hash.
+
+An injective encoding is not a collision-free digest, though: the fingerprint
+truncates SHA-256 to 8 bytes, so distinct inputs can still collide at ~2^-64.
+Why 8 bytes is enough is a matter of **scope**, not of digest width — a
+fingerprint is only ever compared against records stored under the same
+`(batch_id, destination_id, provider_key)` key, and only a handful of item lists
+ever exist for one key inside its 25h lifetime. The exposure is therefore ~2^-64
+per comparison, not a birthday problem across ~800K envelopes/day. Widen
+`FINGERPRINT_BYTES` if that scoping assumption ever stops holding.
 
 Bit `i` indexes into the **received** `batch.items` list. The fingerprint binds
 the bitmap to the exact item-identity sequence it was computed against, which is
