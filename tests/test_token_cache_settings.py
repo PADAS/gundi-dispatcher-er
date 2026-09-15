@@ -68,7 +68,17 @@ def test_unknown_scheme_logs_a_warning(caplog):
 @pytest.fixture(autouse=True)
 def _restore_settings(monkeypatch):
     yield
-    for key in ("GUNDI_TOKEN_CACHE_URL", "REDIS_TOKEN_CACHE_DB", "REDIS_HOST", "REDIS_PORT"):
-        monkeypatch.delenv(key, raising=False)
+    monkeypatch.undo()  # restore the ambient environment before rebuilding settings from it
     import core.settings
     importlib.reload(core.settings)
+
+
+def test_restore_fixture_rebuilds_settings_from_the_ambient_environment(monkeypatch):
+    # The autouse fixture must leave core.settings matching os.environ once
+    # monkeypatch has undone this test's changes; assert the pre-test state here
+    # and rely on the next test's import seeing the same values.
+    import os
+    import core.settings as settings
+    expected_port = int(os.environ.get("REDIS_PORT", "6379"))
+    assert settings.REDIS_PORT == expected_port
+    assert settings.GUNDI_TOKEN_CACHE_URL.endswith(f":{expected_port}/{settings.REDIS_TOKEN_CACHE_DB}")
