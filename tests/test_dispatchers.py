@@ -372,3 +372,26 @@ async def test_batch_dispatcher_posts_full_list_not_just_last_item(
     assert isinstance(posted, list)
     assert len(posted) == 3
     assert [o["manufacturer_id"] for o in posted] == ["device-0", "device-1", "device-2"]
+
+
+@pytest.mark.asyncio
+async def test_integration_details_cache_miss_builds_one_client_with_timeouts(
+    mocker, mock_cache_empty, mock_gundi_client_v2_class, mock_gundi_client_v2, destination_integration_v2
+):
+    # The token-cache upgrade relies on every miss going through
+    # core.utils.GundiClient (whose default backend core.settings installed);
+    # pin that path so a refactor cannot silently bypass it.
+    mocker.patch("core.utils._cache_db", mock_cache_empty)
+    mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
+    from core import settings, utils
+
+    result = await utils.get_integration_details(str(destination_integration_v2.id))
+
+    assert result == destination_integration_v2
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+    mock_gundi_client_v2_class.assert_called_once_with(
+        connect_timeout=connect_timeout, data_timeout=read_timeout
+    )
+    mock_gundi_client_v2.get_integration_details.assert_called_once_with(
+        integration_id=str(destination_integration_v2.id)
+    )
