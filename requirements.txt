@@ -315,8 +315,10 @@ requests==2.32.5
     #   google-api-core
     #   google-cloud-storage
     #   opentelemetry-exporter-otlp-proto-http
-respx==0.21.1
-    # via gundi-client
+respx==0.23.1
+    # via
+    #   -r requirements.in
+    #   gundi-client
 rsa==4.9.1
     # via google-auth
 six==1.17.0

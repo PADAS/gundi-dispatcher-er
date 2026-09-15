@@ -383,7 +383,7 @@ async def test_integration_details_cache_miss_builds_one_client_with_timeouts(
     # pin that path so a refactor cannot silently bypass it.
     mocker.patch("core.utils._cache_db", mock_cache_empty)
     mocker.patch("core.utils.GundiClient", mock_gundi_client_v2_class)
-    from core import settings, utils
+    from core import utils
 
     result = await utils.get_integration_details(str(destination_integration_v2.id))
 
